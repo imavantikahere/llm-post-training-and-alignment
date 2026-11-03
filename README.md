@@ -10,6 +10,22 @@ The objective is to examine different LLM post-training methodologies through pr
 
 The repository focuses on the underlying training objectives, data preparation pipelines, parameter-update strategies, and trade-offs associated with each approach.
 
+### Note
+
+#### Scope: Fine-Tuning vs Retrieval-Augmented Generation (RAG)
+
+This project focuses on the experimental evaluation of LLM post-training methodologies, including continued pretraining, supervised fine-tuning, parameter-efficient adaptation, and preference optimization.
+
+The primary objective is to investigate how these approaches influence task-specific model behavior, training efficiency, and response quality under controlled experimental conditions.
+
+Retrieval-Augmented Generation (RAG) represents an important alternative or complementary approach, particularly for applications requiring access to frequently updated documents, source attribution, or external knowledge.
+
+However, this study does not attempt to establish fine-tuning as a universally preferable alternative to RAG.
+
+The industrial use case serves as an experimental setting for evaluating model adaptation rather than a claim that weight-based adaptation is the optimal production architecture.
+
+A comparison with retrieval-based approaches remains outside the scope of the present study and is a potential direction for future work.
+
 ## 1. Objectives
 
 The primary objectives of this repository are to:
