@@ -1,0 +1,20 @@
+{
+  "base_model": "unsloth/Qwen2.5-1.5B-bnb-4bit",
+  "max_seq_length": 512,
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "batch_size": 1,
+  "gradient_accumulation_steps": 8,
+  "max_steps": 30,
+  "learning_rate": 0.0002,
+  "seed": 42,
+  "data_file": "/content/drive/MyDrive/llm-post-training-experimental-study/data/processed/continued_pretraining.jsonl",
+  "train_records": 270,
+  "validation_records": 30,
+  "training_loss": 2.1951297839482624,
+  "validation_loss": 1.231460452079773,
+  "training_seconds": 101.32,
+  "peak_gpu_memory_allocated_gb": 2.362,
+  "gpu_name": "Tesla T4",
+  "adapter_dir": "/content/drive/MyDrive/llm-post-training-experimental-study/models/stage1_non_instruction_adapter"
+}
