@@ -1,0 +1,4 @@
+streamlit>=1.40,<2
+pandas>=2.2,<3
+huggingface_hub>=0.32,<2
+requests>=2.31,<3
