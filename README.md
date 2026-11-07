@@ -213,12 +213,25 @@ The original base model and trained adapter weights are not embedded in these Ma
 
 A lightweight, interactive dashboard will present **precomputed outputs from actual checkpoints**, allow model-stage comparisons and visualize which source observations were preserved or omitted.
 
-Planned modules:
-- **Model Comparison Lab:** select a predefined industrial technician note and compare saved responses.
-- **Evidence Preservation Inspector:** review each input observation against a model's generated report.
-- **Results Dashboard:** show verified metrics, examples and failure cases.
+Planned architecture
+```mermaid
+flowchart TD
+    A["👩‍💻 User enters maintenance note"] --> B["Streamlit frontend"]
+    B -->|"HTTPS request"| C["FastAPI backend on RunPod"]
+    C --> D["GPU inference engine"]
+    D --> E["Qwen2.5-1.5B base model"]
+    E --> F["Load your CPT adapter"]
+    E --> G["Load your SFT adapter"]
+    E --> H["Load your DPO adapter"]
+    F --> I["Generate CPT response"]
+    G --> J["Generate SFT response"]
+    H --> K["Generate DPO response"]
+    I --> L["Return results to Streamlit"]
+    J --> L
+    K --> L
+    L --> M["Display reports side by side"]
 
-The free-hosted version will explicitly label replayed inference results as **precomputed**, rather than suggesting visitors are running live GPU inference.
+```
 
 <!-- Add a Streamlit URL, screenshot or demo video after the UI is complete. -->
 
