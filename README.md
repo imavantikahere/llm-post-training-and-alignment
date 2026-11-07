@@ -139,11 +139,13 @@ Each report was assessed along independent dimensions:
 
 ### Evaluation visualizations
 
-![Evidence preservation vs required-field coverage](results/evaluation_05/final_recall_schema.png)
+<img width="2047" height="812" alt="final_recall_schema" src="https://github.com/user-attachments/assets/7f91246f-0383-4ec2-b118-6b5bca7e1dae" />
+
 
 *Figure 1. Evidence preservation compared with coverage of the seven requested fields. The chart was generated from the corrected field-presence metric; the notebook plot title/legend may still use “schema compliance,” which here means field presence only.*
 
-![Human-reviewed failure-mode flags](results/evaluation_05/final_failure_modes.png)
+<img width="2047" height="812" alt="final_failure_modes" src="https://github.com/user-attachments/assets/048ffdd9-0c5e-4f4d-8219-e950656fc987" />
+
 
 *Figure 2. Number of reports flagged for unsupported observations, unsupported interpretations and visible truncation (10 reports per checkpoint). Annotations are AI-assisted and should be manually checked.*
 
