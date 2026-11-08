@@ -1,4 +1,4 @@
-#  Industrial Maintainence Documentation Aid — An Experimental Study on LLM Post-Training & Alignment
+#  Industrial Maintainence Documentation Aid — An Experimental Project on LLM Post-Training & Alignment
 
 **Continued Pretraining (CFT) · Supervised Fine-Tuning (SFT) · Direct Preference Optimization (DPO) · Comparative Evaluation**
 
