@@ -1,6 +1,6 @@
-# LLM Post-Training & Alignment — An Experimental Study
+#  Industrial Maintainence Documentation Aid — An Experimental Study on LLM Post-Training & Alignment
 
-**Continued Pretraining · Supervised Fine-Tuning (SFT) · Direct Preference Optimization (DPO) · Comparative Evaluation**
+**Continued Pretraining (CFT) · Supervised Fine-Tuning (SFT) · Direct Preference Optimization (DPO) · Comparative Evaluation**
 
 **Domain-specific industrial maintenance documentation assistant and LLM post-training research project.** This prototype transforms unstructured equipment observations and technician notes into structured **draft maintenance reports** for maintenance, operations, and reliability teams. It provides a consistent, reviewable format for reported symptoms, operating conditions, measurements, possible contributors, uncertainty, and suggested follow-up—**without claiming to diagnose equipment faults**.
 
