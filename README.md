@@ -2,7 +2,9 @@
 
 **Continued Pretraining · Supervised Fine-Tuning (SFT) · Direct Preference Optimization (DPO) · Comparative Evaluation**
 
-An independent, hands-on exploration of how post-training changes the behavior of an open-weight language model. I use **industrial maintenance report generation** as a consistent case study to examine the difference between learning domain-specific language, following instructions, and preferring certain responses.
+**Domain-specific industrial maintenance documentation assistant and LLM post-training research project.** This prototype transforms unstructured equipment observations and technician notes into structured **draft maintenance reports** for maintenance, operations, and reliability teams. It provides a consistent, reviewable format for reported symptoms, operating conditions, measurements, possible contributors, uncertainty, and suggested follow-up—**without claiming to diagnose equipment faults**.
+
+Alongside the practical document-assistant use case, this independent study compares four Qwen2.5-1.5B checkpoints—Base, continued pretraining (CPT), supervised fine-tuning (SFT), and direct preference optimization (DPO)—to investigate how domain adaptation, instruction-following, and preference alignment influence the accuracy and structure of generated maintenance documentation.
 
 > **Research question:** Does additional post-training improve the reliability of generated reports—or mainly change their structure and learned response preferences?
 
@@ -12,7 +14,23 @@ An independent, hands-on exploration of how post-training changes the behavior o
 
 **Prototype link:** https://llm-post-training-and-alignment-aug26.streamlit.app/
 
-(Inference works only when RunPod backend is up and running -- for now)
+### How to use the maintenance document assistant
+
+1. **Open the prototype** using the link above and select **Try a new note** in the sidebar.
+2. **Enter a technician observation.** Paste a fictional or non-confidential maintenance note describing equipment, symptoms, measurements, timestamps, actions already taken, and any unknowns. Avoid private plant records or sensitive operational data.
+3. **Choose checkpoints.** Select **Base Qwen**, **CPT**, **SFT**, and/or **DPO**. For a quick demonstration, start with **SFT**; select multiple checkpoints to compare post-training behavior.
+4. **Set the maximum output tokens** using the slider (for example, 350), then click **Generate with my fine-tuned Qwen models**.
+5. **Review the generated draft reports.** Inspect the structured maintenance sections side by side. Check that equipment IDs, values, timestamps, negative findings, and uncertainty are preserved; treat suggested contributors as unconfirmed possibilities.
+6. **Compare the live metrics.** Explore **Latency**, **Generation speed**, **Schema coverage** (heading presence), and **Token usage**. Download the current outputs as **JSON** and live metrics as **CSV** if needed.
+7. **Explore the research results** through **Research overview**, **Checkpoint comparison**, **Evidence inspector**, and **Methods & limits**. These saved benchmark views work even when the live GPU is offline.
+
+**Example fictional maintenance note:**
+
+> During monitoring of centrifugal gas compressor K-204, vibration increased from 2.8 mm/s to 6.4 mm/s over 40 minutes. Discharge temperature rose from 82°C to 96°C while suction pressure remained steady at 18 bar. An intermittent noise was observed near the drive-end bearing. The compressor was placed on standby at 14:35 pending inspection. The cause is unconfirmed; no vibration spectrum analysis or internal inspection has been performed.
+
+**Availability:** The Streamlit dashboard and saved research results remain accessible when the RunPod GPU is stopped, but **new live reports require the FastAPI GPU backend to be running**. The current Pod deployment does not auto-start when a visitor clicks Generate.
+
+**Intended workflow:** This is a *drafting and comparison assistant*, not an autonomous maintenance decision-maker. A qualified engineer must check source fidelity and approve any documentation before organizational use. The current prototype is not a certified QA/QC report generator or fault-diagnosis system.
 
 ## Background: From Transformers to Post-Training
 
@@ -44,14 +62,14 @@ The next step was to understand what happens *after* pretraining: how a model is
 | **bitsandbytes** | Low-bit quantization and optimizer support |
 | **Google Colab + Google Drive** | GPU experimentation and checkpoint persistence |
 | **pandas / Matplotlib** | Comparative results, manual-audit exports and plots |
-| **Streamlit** | Interactive model-comparison dashboard using saved outputs (planned deployment) |
-| **Git / GitHub** | Version control and documentation |
+| **Streamlit** | Deployed maintenance-document assistant UI, saved benchmark dashboard, live checkpoint comparisons |
+| **FastAPI + Uvicorn** | Authenticated job-based inference API (`POST /jobs`, `GET /jobs/{job_id}`) |\n| **RunPod + Network Volume** | GPU-hosted inference and persistent adapter/backend/model-cache storage |\n| **Git / GitHub** | Version control and documentation |
 
 ## Scope of the Study
 
 **In scope:** dataset preparation, QLoRA-based continued pretraining, instruction SFT, DPO, checkpoint verification, controlled model comparisons, error analysis and reproducible documentation.
 
-**Out of scope:** full foundation-model pretraining, PPO-style RLHF, a separately trained reward model, real-time industrial control, fault confirmation, production deployment and a live RAG service. Retrieval-augmented generation and structured evidence extraction are potential future extensions—not part of this controlled comparison.
+**Out of scope:** full foundation-model pretraining, PPO-style RLHF, a separately trained reward model, real-time industrial control, fault confirmation, a production-validated industrial deployment and a live RAG service. A working educational live GPU prototype is deployed, but production-grade safety and QA/QC integration remain out of scope. Retrieval-augmented generation and structured evidence extraction are potential future extensions—not part of this controlled comparison.
 
 The project is an **educational experimental study**, not a production-ready maintenance diagnostic system.
 
@@ -367,4 +385,4 @@ Before sharing the demo widely, add request limits, concurrency limits, expendit
 
 ---
 
-*Independent learning and research portfolio project. Evaluation annotations were AI-assisted and should be independently reviewed; the dashboard link will be added after deployment.*
+*Independent learning and research portfolio project. Evaluation annotations were AI-assisted and should be independently reviewed. The live document-assistant prototype is linked near the top; availability depends on the GPU backend.*
