@@ -38,7 +38,7 @@ This project builds on my earlier **Transformer-from-scratch implementation**, w
 
 The next step was to understand what happens *after* pretraining: how a model is adapted to a domain, taught to follow instructions, and aligned with preferred responses. For that reason, this study uses an existing open-weight model and focuses on **post-training methods**, not on rebuilding the transformer architecture.
 
-**Previous work:** [My GitHub portfolio](https://github.com/imavantikahere) — replace this with the **direct link to my Transformer-from-scratch repository** before publishing.
+**Previous work:** [(https://github.com/imavantikahere/transformer-code)]
 
 ## Project Objectives
 
