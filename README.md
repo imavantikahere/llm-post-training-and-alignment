@@ -209,11 +209,11 @@ llm-post-training-experimental-study/
 
 The original base model and trained adapter weights are not embedded in these Markdown instructions. **Do not commit large checkpoints, Google Drive credentials, or access tokens.** Publish code, permissible synthetic data, reports and figures; provide external adapter links only when appropriate.
 
-## Streamlit UI — Research Dashboard
+## Interactive UI and Live Deployment
 
-A lightweight, interactive dashboard will present **precomputed outputs from actual checkpoints**, allow model-stage comparisons and visualize which source observations were preserved or omitted.
+This project includes an interactive **Streamlit research dashboard** and an optional live GPU inference service for comparing four checkpoints of Qwen2.5-1.5B: **Base Qwen, CPT, SFT, and DPO**. The live application is an educational demonstration, not a validated industrial maintenance or QA/QC decision system.
 
-Planned architecture
+### Low Level Architecture
 ```mermaid
 flowchart TD
     A["👩‍💻 User enters maintenance note"] --> B["Streamlit frontend"]
@@ -232,6 +232,109 @@ flowchart TD
     L --> M["Display reports side by side"]
 
 ```
+
+### User interface
+
+The Streamlit dashboard provides five views:
+
+| View | Function |
+| --- | --- |
+| Research overview | Saved evaluation summaries and aggregate benchmark charts |
+| Checkpoint comparison | Side-by-side saved model outputs for the same synthetic scenario |
+| Evidence inspector | Evidence-preservation labels and report-level error flags |
+| Try a new note | Actual live inference against selected checkpoints, when the GPU backend is online |
+| Methods & limits | Methodology, caveats, and downloadable review data |
+
+In **Try a new note**, visitors enter an unstructured technician observation, select any combination of Base Qwen/CPT/SFT/DPO, choose a maximum output-token limit, and submit a request. The UI shows the resulting reports side by side and a live comparison table and interactive charts for **latency**, **generated token count**, **effective tokens per second**, and **detected live-report headings**. Live outputs and live metrics can be downloaded as JSON and CSV respectively.
+
+The live schema check counts the presence of the seven expected heading labels in a generated report; **it is not an evidence-accuracy, hallucination, or industrial-compliance score**. Live metrics are separate from the project's saved 10-scenario AI-assisted evaluation and do not inherit its benchmark scores.
+
+### Deployment architecture
+
+```mermaid
+flowchart TD
+    U["Visitor / browser"] --> S["Streamlit Community Cloud<br/>app.py + saved benchmark data"]
+    S -->|"HTTPS POST /jobs<br/>Bearer API key"| F["FastAPI on RunPod GPU Pod<br/>backend.py"]
+    F -->|"enqueue job"| J["Inference job worker"]
+    J --> E["Transformers + PEFT engine"]
+    H["Hugging Face<br/>base-model repository + three LoRA adapter repositories"] -.->|"initial downloads / restores"| V["RunPod persistent Network Volume<br/>mounted at /workspace"]
+    V -->|"model adapters + HF cache + backend code"| E
+    E --> Q["Qwen2.5-1.5B base checkpoint"]
+    E --> A["Selected CPT / SFT / DPO LoRA adapter"]
+    Q --> R["Generated report + timing + token metadata"]
+    A --> R
+    R --> F
+    S -->|"GET /jobs/{job_id} polling"| F
+    F -->|"status and final JSON"| S
+    S --> D["Reports + charts + downloads"]
+```
+
+**Roles:** Streamlit is the public frontend and renders evaluation results; FastAPI authenticates requests and manages asynchronous inference jobs; RunPod provides GPU hardware; Transformers and PEFT load Qwen and saved LoRA adapters; Hugging Face hosts model artifacts; the RunPod Network Volume preserves downloads and source files separately from any particular Pod.
+
+### Request lifecycle
+
+1. The visitor enters a maintenance note and selects checkpoints in Streamlit.
+2. Streamlit sends an authenticated `POST /jobs` request to the RunPod HTTPS proxy for port `8000`, specifying the note, stages and token limit. **The API key is stored in Streamlit Secrets, never in frontend source or the repository.**
+3. FastAPI validates its Bearer token against the server's `INFERENCE_API_KEY`, schedules the job and returns a job identifier.
+4. The inference engine loads the Qwen base weights and appropriate saved LoRA checkpoint(s), processing selected stages sequentially to reduce GPU memory pressure.
+5. Streamlit periodically polls `GET /jobs/{job_id}` until the job completes or fails.
+6. The server returns generated text and metadata; Streamlit renders reports, calculated structural/performance metrics, charts and downloads.
+
+### Storage and reproducibility
+
+A **RunPod Network Volume** is mounted at `/workspace` in the selected data center. The project uses these locations:
+
+```text
+/workspace/
+  llm-post-training-service/backend/    # FastAPI source, requirements, startup script
+  llm-post-training/models/             # saved CPT/SFT/DPO LoRA adapter folders
+  hf-cache/                              # cached pretrained model and tokenizer files
+  persistence_test.txt                   # optional restart-verification marker
+```
+
+Network volumes persist across Pod stop and termination **as long as the network volume itself is retained**. Unlike this persistent storage, the running FastAPI service, shell environment variables, and packages installed on the container disk may need to be restored when a Pod is recreated. Keep a version-controlled copy of the backend on GitHub and model artifacts on Hugging Face as independent backups.
+
+Check the volume from inside the Pod:
+
+```bash
+findmnt -T /workspace -o TARGET,SOURCE,FSTYPE
+find /workspace/llm-post-training/models -name adapter_config.json
+ls -lah /workspace/llm-post-training-service/backend
+DF_OUT=$(df -h /workspace); printf '%s\n' "$DF_OUT"
+```
+
+The accompanying `verify_runpod_persistence.sh` script checks the mount, expected files and available storage, and writes a harmless sentinel. **The sentinel must be read again after stopping/restarting a Pod to verify persistence empirically.**
+
+### Backend start and public endpoint
+
+The current deployed Pod uses a manual backend startup procedure (automatic startup is planned but **not yet implemented**):
+
+```bash
+cd /workspace/llm-post-training-service/backend
+python -m pip install -r requirements-api.txt  # if dependencies were lost with the container
+export PROJECT_ROOT=/workspace/llm-post-training
+export HF_HOME=/workspace/hf-cache
+# Supply INFERENCE_API_KEY securely; do not commit or print it.
+bash start_api.sh
+```
+
+The Pod must expose **HTTP port 8000**. Verify `GET /health` locally and via the RunPod proxy before using the UI. A request to `POST /jobs` without a valid Bearer key should be rejected with `401`.
+
+Streamlit Community Cloud Secrets (not GitHub source) contain:
+
+```toml
+GPU_API_URL = "https://<CURRENT-POD-ID>-8000.proxy.runpod.net"
+GPU_API_KEY = "<SAME-SECRET-AS-INFERENCE_API_KEY>"
+```
+
+The Pod ID / proxy URL changes if a replacement Pod is created, so update `GPU_API_URL` accordingly. The public app URL is the deployed `*.streamlit.app` URL (copy it via **Share** in the running Streamlit app), **not** the RunPod proxy.
+
+### Availability, cost and security
+
+The **Streamlit website and saved benchmark views remain available when the GPU Pod is stopped**, but new live inference requests do not. A running RunPod Pod accrues GPU compute charges even when nobody is submitting requests; stopping the Pod stops GPU compute charges, while network-volume storage remains billable. This architecture is **not currently scale-to-zero**. For on-demand public inference, a separate RunPod Serverless deployment and frontend API changes would be required.
+
+Before sharing the demo widely, add request limits, concurrency limits, expenditure controls and an informative GPU-offline message. Never publish Hugging Face tokens, `INFERENCE_API_KEY`, `GPU_API_KEY`, private notes or production plant data. Rotate any credential accidentally exposed in screenshots or Git history.
+
 
 <!-- Add a Streamlit URL, screenshot or demo video after the UI is complete. -->
 
