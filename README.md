@@ -8,6 +8,12 @@ An independent, hands-on exploration of how post-training changes the behavior o
 
 **Base model:** Qwen2.5-1.5B · **Training:** 4-bit quantization + LoRA/QLoRA · **Environment:** Python / Google Colab / NVIDIA GPU
 
+# Try it out 
+
+**Prototype link:** https://llm-post-training-and-alignment-aug26.streamlit.app/
+
+(Inference works only when RunPod backend is up and running -- for now)
+
 ## Background: From Transformers to Post-Training
 
 This project builds on my earlier **Transformer-from-scratch implementation**, where I explored the architecture and mechanics behind language models rather than relying solely on pretrained model APIs.
@@ -335,8 +341,6 @@ The **Streamlit website and saved benchmark views remain available when the GPU 
 
 Before sharing the demo widely, add request limits, concurrency limits, expenditure controls and an informative GPU-offline message. Never publish Hugging Face tokens, `INFERENCE_API_KEY`, `GPU_API_KEY`, private notes or production plant data. Rotate any credential accidentally exposed in screenshots or Git history.
 
-
-<!-- Add a Streamlit URL, screenshot or demo video after the UI is complete. -->
 
 ## Limitations & Responsible Use
 
