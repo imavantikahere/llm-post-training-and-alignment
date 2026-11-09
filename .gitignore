@@ -1,0 +1,32 @@
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+**/.streamlit/secrets.toml
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Local caches, large model weights, temporary data and logs
+hf-cache/
+pip-cache/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.log
+.DS_Store
+runtime/
+logs/
