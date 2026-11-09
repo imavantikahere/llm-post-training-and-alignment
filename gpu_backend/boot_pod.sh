@@ -1,69 +1,71 @@
 #!/usr/bin/env bash
-# Boot RunPod's normal services AND the persistent FastAPI inference service.
-# Select this script as the Pod's container/Docker start command.
-# It must be copied to /workspace/llm-post-training-service/backend/boot_pod.sh
-# before configuring RunPod to invoke it.
+# RunPod custom ENTRYPOINT wrapper: normal image services + persistent FastAPI.
+# A plain "Start command" may become arguments to /start.sh instead of running.
 set -Eeuo pipefail
 
-BACKEND="/workspace/llm-post-training-service/backend"
-LOG_DIR="/workspace/llm-post-training-service/logs"
-mkdir -p "$LOG_DIR"
-export PROJECT_ROOT="/workspace/llm-post-training"
-export HF_HOME="/workspace/hf-cache"
+BACKEND=/workspace/llm-post-training-service/backend
+RUNTIME=/workspace/llm-post-training-service/runtime
+LOG_DIR=/workspace/llm-post-training-service/logs
+VENV="$RUNTIME/venv"
+export PROJECT_ROOT=/workspace/llm-post-training
+export HF_HOME=/workspace/hf-cache
 export PYTHONUNBUFFERED=1
+mkdir -p "$LOG_DIR" "$RUNTIME" "$HF_HOME"
 
-# Launch API bootstrap in background: do NOT delay the normal Jupyter/SSH services.
 (
-    set -Eeuo pipefail
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Starting Qwen backend bootstrap"
+  set -Eeuo pipefail
+  echo "===== FastAPI boot $(date -u +%FT%TZ) ====="
+  if [[ -z "$INFERENCE_API_KEY" ]]; then
+    echo "ERROR: INFERENCE_API_KEY is not set"
+    exit 1
+  fi
+  for file in "$BACKEND/start_api.sh" "$BACKEND/requirements-api.txt"; do
+    [[ -f "$file" ]] || { echo "ERROR: Missing $file"; exit 1; }
+  done
+  for stage in stage1_non_instruction_adapter stage2_domain_sft_adapter stage3_dpo_adapter; do
+    [[ -f "$PROJECT_ROOT/models/$stage/adapter_config.json" ]] || {
+      echo "ERROR: Missing adapter $stage"; exit 1;
+    }
+  done
 
-    if [[ -z "${INFERENCE_API_KEY:-}" ]]; then
-        echo "ERROR: INFERENCE_API_KEY is missing. Set it in RunPod Pod environment variables."
-        exit 1
-    fi
-    if [[ ! -d "$BACKEND" ]]; then
-        echo "ERROR: Persistent backend folder is missing: $BACKEND"
-        exit 1
-    fi
-    if [[ ! -f "$BACKEND/start_api.sh" ]]; then
-        echo "ERROR: Expected $BACKEND/start_api.sh. Preserve the proven startup script."
-        exit 1
-    fi
-    for stage in stage1_non_instruction_adapter stage2_domain_sft_adapter stage3_dpo_adapter; do
-        if [[ ! -f "$PROJECT_ROOT/models/$stage/adapter_config.json" ]]; then
-            echo "ERROR: Missing LoRA adapter configuration for $stage"
-            exit 1
-        fi
-    done
+  if [[ ! -x "$VENV/bin/python" ]]; then
+    echo "Creating persistent Python virtual environment"
+    python -m venv "$VENV"
+  fi
+  export VIRTUAL_ENV="$VENV"
+  export PATH="$VENV/bin:$PATH"
+  export PIP_CACHE_DIR="$RUNTIME/pip-cache"
 
-    cd "$BACKEND"
-    # Container-level pip packages may be absent after a fresh Pod is deployed.
-    # Only install when missing, using the existing known backend requirements.
-    if ! python - <<'PY'
+  if ! python - <<'PY'
 import importlib.util
-modules = ["uvicorn", "fastapi", "torch", "transformers", "peft", "unsloth", "bitsandbytes", "accelerate", "safetensors"]
-missing = [module for module in modules if importlib.util.find_spec(module) is None]
+mods = ('torch','transformers','peft','unsloth','bitsandbytes','accelerate','safetensors','fastapi','uvicorn')
+missing = [m for m in mods if importlib.util.find_spec(m) is None]
 if missing:
-    raise RuntimeError("Missing Python modules: " + ", ".join(missing))
-print("Backend dependencies present")
+    raise RuntimeError("Missing persistent packages: " + ", ".join(missing))
+import torch
+assert torch.cuda.is_available(), "CUDA unavailable"
+print("Python environment OK; CUDA GPU:", torch.cuda.get_device_name(0))
 PY
-    then
-        if [[ ! -f "$BACKEND/requirements-api.txt" ]]; then
-            echo "ERROR: Dependencies missing and requirements-api.txt not found in $BACKEND"
-            exit 1
-        fi
-        echo "Installing backend requirements from persistent file..."
-        python -m pip install -r "$BACKEND/requirements-api.txt"
-    fi
+  then
+    echo "Installing dependencies to persistent network-volume venv"
+    python -m pip install -r "$BACKEND/requirements-api.txt"
+    python - <<'PY'
+import torch
+from unsloth import FastLanguageModel
+import peft, transformers, fastapi, uvicorn, bitsandbytes
+assert torch.cuda.is_available(), "CUDA unavailable"
+print("Inference dependencies verified")
+PY
+  fi
 
-    echo "Launching FastAPI on port 8000..."
-    exec bash "$BACKEND/start_api.sh"
+  cd "$BACKEND"
+  echo "Starting API with Python: $(command -v python)"
+  exec bash "$BACKEND/start_api.sh"
 ) >> "$LOG_DIR/fastapi-startup.log" 2>&1 &
 
-# Keep the image's built-in lifecycle (Jupyter, SSH, Nginx).
-# In the verified PyTorch template /start.sh remains running.
+# Preserve normal FileBrowser/Jupyter/SSH container services.
 if [[ ! -f /start.sh ]]; then
-    echo "ERROR: Base image /start.sh not found; check the selected RunPod template." >&2
-    exit 1
+  echo "ERROR: /start.sh missing; incompatible image" >&2
+  exit 1
 fi
 exec bash /start.sh
