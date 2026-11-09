@@ -1,0 +1,11 @@
+# CUDA PyTorch is supplied by the pinned pytorch/pytorch base image.
+# Install dependencies into the IMAGE once, not into a new Pod at each request.
+runpod>=1.7,<2
+unsloth
+transformers>=4.45,<5
+peft>=0.13,<1
+accelerate>=1,<2
+bitsandbytes>=0.45,<1
+safetensors>=0.4,<1
+huggingface-hub>=0.32,<2
+sentencepiece>=0.2,<1
