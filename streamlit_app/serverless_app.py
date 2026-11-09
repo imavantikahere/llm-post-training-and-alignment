@@ -1394,24 +1394,6 @@ elif page == "Try a new note":
             "Saved benchmark comparisons remain available."
         )
 
-    # Optional temporary access guard for cost-limited deployment tests.
-    # Remove SERVERLESS_DEMO_PASSWORD from Secrets to allow public inference.
-    try:
-        demo_password = str(st.secrets.get("SERVERLESS_DEMO_PASSWORD", ""))
-    except (FileNotFoundError, KeyError):
-        demo_password = os.getenv("SERVERLESS_DEMO_PASSWORD", "")
-    if demo_password:
-        entered_password = st.text_input(
-            "Demo access code (temporary spending safeguard)",
-            type="password",
-            key="serverless_demo_access",
-        )
-        demo_authorized = hashlib.sha256(entered_password.encode()).digest() == hashlib.sha256(demo_password.encode()).digest()
-        if not demo_authorized:
-            st.caption("Live Serverless inference is restricted while the endpoint is being tested.")
-    else:
-        demo_authorized = True
-
     # -------------------------
     # Request identifier
     # -------------------------
@@ -1436,7 +1418,6 @@ elif page == "Try a new note":
         type="primary",
         disabled=(
             not bool(endpoint_id and api_key)
-            or not demo_authorized
             or len(typed.strip()) < 20
             or not chosen
         ),
