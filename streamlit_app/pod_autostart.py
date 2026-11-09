@@ -20,7 +20,6 @@ import threading
 import time
 from contextlib import contextmanager
 from datetime import date
-from urllib.parse import urlparse
 
 import requests
 import streamlit as st
@@ -63,9 +62,14 @@ def _count(kind: str) -> None:
 
 
 def _runpod(method: str, pod_id: str, key: str, action: str = "") -> dict:
-    url = f"{API_BASE}/pods/{pod_id}" + (f"/{action}" if action else "")
+    # RunPod REST v2 uses POST /pods/{id}/action for start/stop.
+    # Older /pods/{id}/start and /stop routes return HTTP 404.
+    url = f"{API_BASE}/pods/{pod_id}" + ("/action" if action else "")
     response = requests.request(
-        method, url, headers={"Authorization": f"Bearer {key}"},
+        method,
+        url,
+        headers={"Authorization": f"Bearer {key}"},
+        json={"action": action} if action else None,
         timeout=(10, 30),
     )
     try:
@@ -73,9 +77,14 @@ def _runpod(method: str, pod_id: str, key: str, action: str = "") -> dict:
     except ValueError:
         data = {}
     if not response.ok:
+        description = ""
+        if isinstance(data, dict):
+            description = str(data.get("message") or data.get("error") or data.get("detail") or "")
+        # Never echo headers or secrets; truncate untrusted error text.
+        description = description[:200].replace("\\n", " ")
         raise RuntimeError(
             f"RunPod {action or 'status'} returned HTTP {response.status_code}. "
-            "Check Pod availability, account credits, API permissions and Pod ID."
+            + (description if description else "Check Pod status, availability, account credits, permissions and Pod ID.")
         )
     return data if isinstance(data, dict) else {}
 
