@@ -12,7 +12,7 @@ Alongside the practical document-assistant use case, this independent study comp
 
 # Try it out 
 
-**Interactive prototype:** The live inference deployment uses the separate Streamlit Serverless entrypoint [`streamlit_app/serverless_app.py`](streamlit_app/serverless_app.py)
+**Interactive prototype:** (https://industrial-qwen-serverless.streamlit.app/)
 
 The [original Streamlit prototype](https://llm-post-training-and-alignment-aug26.streamlit.app/) remains in the repository's prior Pod-based setup; availability and current backend configuration may differ. The Serverless frontend is deployed separately; its public URL is not recorded here.
 
