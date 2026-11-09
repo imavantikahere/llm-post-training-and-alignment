@@ -169,17 +169,17 @@ Each report was assessed along independent dimensions:
 
 ### Evaluation visualizations
 
-<img width="2047" height="812" alt="final_recall_schema" src="https://github.com/user-attachments/assets/7f91246f-0383-4ec2-b118-6b5bca7e1dae" />
+![Evidence preservation and required-field presence](results/evaluation_05/final_recall_schema.png)
 
 
 *Figure 1. Evidence preservation compared with coverage of the seven requested fields. The chart was generated from the corrected field-presence metric; the notebook plot title/legend may still use “schema compliance,” which here means field presence only.*
 
-<img width="2047" height="812" alt="final_failure_modes" src="https://github.com/user-attachments/assets/048ffdd9-0c5e-4f4d-8219-e950656fc987" />
+![Failure-mode counts by checkpoint](results/evaluation_05/final_failure_modes.png)
 
 
 *Figure 2. Number of reports flagged for unsupported observations, unsupported interpretations and visible truncation (10 reports per checkpoint). Annotations are AI-assisted and should be manually checked.*
 
-> **Figure files:** Copy `final_recall_schema.png` and `final_failure_modes.png` from the notebook's Google Drive `results/evaluation_05/` directory into the **same path inside this GitHub repository**. Otherwise these relative Markdown images will not render.
+> **Figure sources:** Both images are already tracked in `results/evaluation_05/` alongside the saved evaluation CSVs.
 
 ### Interpretation
 
@@ -375,6 +375,7 @@ The adapters are also backed up as private Hugging Face **model** repositories. 
 | `gpu_backend/inference_engine.py` | Loads Base Qwen / CPT / SFT / DPO for actual inference |
 | `gpu_backend/requirements-api.txt` | Full GPU inference Python dependencies |
 | `gpu_backend/boot_pod.sh` | Persistent Python environment and backend startup wrapper |
+| `gpu_backend/start_api.sh` | Version-controlled FastAPI start command; keep the deployed copy synchronized |
 | `gpu_backend/start_runpod.sh` | Manual backend-start alternative for the GitHub backend layout |
 
 Expose RunPod **HTTP port 8000**, set `INFERENCE_API_KEY` on the Pod, and ensure the actual container startup hook launches FastAPI on Pod boot. A mere RunPod Start command passed as arguments to `/start.sh` may not execute; FileBrowser images have different entrypoint/post-start behavior. Test an authenticated `GET /health` returning HTTP 200. If automated startup fails, inspect the persistent `llm-post-training-service/logs` folder, and use the current deployed `start_api.sh` as a manual recovery path.
