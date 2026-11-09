@@ -18,6 +18,7 @@ import requests
 import pandas as pd
 import altair as alt
 import streamlit as st
+from pod_autostart import pod_session
 
 
 # ============================================================
@@ -1447,104 +1448,105 @@ elif page == "Try a new note":
         ):
 
             try:
-                response = requests.post(
-                    api_url.rstrip("/") + "/jobs",
-                    headers={
-                        "Authorization": (
-                            "Bearer " + api_key
-                        )
-                    },
-                    json={
-                        "note": typed.strip(),
-                        "stages": chosen,
-                        "max_new_tokens": max_tokens,
-                    },
-                    timeout=(15, 35),
-                )
-
-                if response.status_code != 202:
-                    try:
-                        reason = response.json().get(
-                            "detail",
-                            response.text[:300],
-                        )
-
-                    except ValueError:
-                        reason = response.text[:300]
-
-                    raise RuntimeError(
-                        f"GPU API returned "
-                        f"{response.status_code}: "
-                        f"{reason}"
-                    )
-
-                job_id = response.json()["job_id"]
-
-                started = time.monotonic()
-
-                progress = st.empty()
-
-                while True:
-
-                    if (
-                        time.monotonic() - started
-                        > 900
-                    ):
-                        raise RuntimeError(
-                            "Inference job exceeded 15 minutes"
-                        )
-
-                    status_resp = requests.get(
-                        (
-                            api_url.rstrip("/")
-                            + "/jobs/"
-                            + job_id
-                        ),
+                with pod_session(api_url, api_key) as active_api_url:
+                    response = requests.post(
+                        active_api_url.rstrip("/") + "/jobs",
                         headers={
                             "Authorization": (
                                 "Bearer " + api_key
                             )
                         },
+                        json={
+                            "note": typed.strip(),
+                            "stages": chosen,
+                            "max_new_tokens": max_tokens,
+                        },
                         timeout=(15, 35),
                     )
 
-                    status_resp.raise_for_status()
-
-                    state = status_resp.json()
-
-                    if state["status"] == "completed":
-                        result = state["result"]
-                        break
-
-                    if state["status"] == "failed":
-                        raise RuntimeError(
-                            state.get(
-                                "error",
-                                "GPU inference failed",
+                    if response.status_code != 202:
+                        try:
+                            reason = response.json().get(
+                                "detail",
+                                response.text[:300],
                             )
+
+                        except ValueError:
+                            reason = response.text[:300]
+
+                        raise RuntimeError(
+                            f"GPU API returned "
+                            f"{response.status_code}: "
+                            f"{reason}"
                         )
 
-                    progress.info(
-                        "Qwen models generating "
-                        "on RunPod GPU…"
-                    )
+                    job_id = response.json()["job_id"]
 
-                    time.sleep(3)
+                    started = time.monotonic()
 
-                progress.empty()
+                    progress = st.empty()
 
-                if not isinstance(
-                    result.get("outputs"),
-                    dict,
-                ):
-                    raise ValueError(
-                        "GPU API returned an invalid result"
-                    )
+                    while True:
 
-                st.session_state["live_result"] = {
-                    "request_id": request_id,
-                    "result": result,
-                }
+                        if (
+                            time.monotonic() - started
+                            > 900
+                        ):
+                            raise RuntimeError(
+                                "Inference job exceeded 15 minutes"
+                            )
+
+                        status_resp = requests.get(
+                            (
+                                active_api_url.rstrip("/")
+                                + "/jobs/"
+                                + job_id
+                            ),
+                            headers={
+                                "Authorization": (
+                                    "Bearer " + api_key
+                                )
+                            },
+                            timeout=(15, 35),
+                        )
+
+                        status_resp.raise_for_status()
+
+                        state = status_resp.json()
+
+                        if state["status"] == "completed":
+                            result = state["result"]
+                            break
+
+                        if state["status"] == "failed":
+                            raise RuntimeError(
+                                state.get(
+                                    "error",
+                                    "GPU inference failed",
+                                )
+                            )
+
+                        progress.info(
+                            "Qwen models generating "
+                            "on RunPod GPU…"
+                        )
+
+                        time.sleep(3)
+
+                    progress.empty()
+
+                    if not isinstance(
+                        result.get("outputs"),
+                        dict,
+                    ):
+                        raise ValueError(
+                            "GPU API returned an invalid result"
+                        )
+
+                    st.session_state["live_result"] = {
+                        "request_id": request_id,
+                        "result": result,
+                    }
 
             except (
                 requests.RequestException,
