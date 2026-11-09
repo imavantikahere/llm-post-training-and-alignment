@@ -96,6 +96,18 @@ flowchart TD
 
 
 
+## Trained Model Checkpoints (Hugging Face)
+
+These are three **independently saved LoRA adapter checkpoints** from the sequential Qwen2.5-1.5B post-training study, rather than three separately pretrained base models. Inference compares each stage independently with Base Qwen; the adapters are not stacked together during report generation.
+
+| Checkpoint | Hugging Face repository | Post-training purpose |
+|---|---|---|
+| **CPT** | [industrial-qwen-cpt-lora](https://huggingface.co/imavantika/industrial-qwen-cpt-lora) | Continued pretraining on synthetic industrial maintenance text |
+| **SFT** | [industrial-qwen-sft-lora](https://huggingface.co/imavantika/industrial-qwen-sft-lora) | Learn structured maintenance reports from instruction-response examples |
+| **DPO** | [industrial-qwen-dpo-lora](https://huggingface.co/imavantika/industrial-qwen-dpo-lora) | Optimize preferences for evidence-aware, uncertainty-conscious reporting |
+
+**Access note:** These repositories may require Hugging Face authentication if their visibility remains private. The public Streamlit demonstration invokes the securely hosted model adapters through RunPod; it does not expose private adapter files to visitors.
+
 ## Datasets
 
 All datasets are **synthetic** and designed for this limited educational experiment.
