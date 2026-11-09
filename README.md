@@ -46,7 +46,7 @@ The next step was to understand what happens *after* pretraining: how a model is
 2. Use **instruction SFT** to teach structured maintenance-report generation.
 3. Apply **DPO** to train on chosen/rejected response preferences emphasizing evidence-grounded, uncertainty-aware reporting.
 4. Compare the saved checkpoints on consistent maintenance scenarios, separating **formatting, evidence completeness, unsupported claims, and preference discrimination**.
-5. Build an **interactive Streamlit research dashboard** to present real saved model outputs and evaluation findings.
+5. Build and deploy an **interactive Streamlit maintenance-document assistant** presenting saved evaluation findings and providing **live GPU inference** across Base Qwen, CPT, SFT, and DPO checkpoints through an authenticated FastAPI/RunPod backend.
 
 ## Technology Stack
 
@@ -110,30 +110,18 @@ These are three **independently saved LoRA adapter checkpoints** from the sequen
 
 ## Datasets
 
-All datasets are **synthetic** and designed for this limited educational experiment.
+All datasets are **synthetic** and designed for this limited educational experiment. The source and processed files below link directly to the corresponding files committed in this repository.
 
-| Dataset | Size | Purpose |
-|---|---:|---|
-| Maintenance-domain text | 300 paragraphs | Continued pretraining / next-token prediction |
-| Instruction-response data | 180 examples (60 scenarios × 3 variants) | Seven-field structured maintenance reports |
-| Preference data | 120 chosen/rejected pairs | Cautious, evidence-grounded response selection |
-| Comparative benchmark | 10 initial synthetic scenarios | Same-prompt inference and evidence-level review |
+| Dataset | Size | Purpose | Source and prepared files |
+|---|---:|---|---|
+| Maintenance-domain text | 300 paragraphs | Continued pretraining / next-token prediction | [Original paragraphs](data/raw/industrial_maintenance_raw_300_paragraphs.txt) · [Prepared CPT JSONL](data/processed/continued_pretraining.jsonl) |
+| Instruction-response data | 180 examples (60 scenarios × 3 variants) | Seven-field structured maintenance reports | [Instruction examples](data/instruction/industrial_maintenance_instruction_dataset.jsonl) · [Prepared SFT JSONL](data/processed/sft_prepared.jsonl) |
+| Preference data | 120 chosen/rejected pairs | Evidence-grounded preference learning | [Preference examples](data/preference/industrial_maintenance_dpo_preference_dataset.jsonl) · [Prepared DPO JSONL](data/processed/dpo_prepared.jsonl) |
+| Comparative benchmark | 10 synthetic scenarios across four checkpoints | Same-prompt inference and evidence-level review | [Saved checkpoint outputs](streamlit_app/data/checkpoint_outputs.jsonl) · [Reviewed evidence CSV](streamlit_app/data/evidence_reviewed.csv) · [Reviewed error CSV](streamlit_app/data/error_reviewed.csv) |
+
+The [original source PDF](data/raw/industrial_maintenance_raw.pdf) is also present in the repository; confirm its provenance and redistribution rights before mirroring or licensing it elsewhere.
 
 **Dataset design considerations:** Train/validation splitting was grouped by underlying scenario or equipment identifier where applicable. The benchmark also requires review for scenario paraphrase overlap. Synthetic labels may omit secondary evidence or contain repeated patterns, so dataset quality is part of the interpretation.
-
-### Target reporting format
-
-```text
-Equipment:
-Reported issue:
-Observed evidence:
-Possible contributors (not confirmed):
-Missing information:
-Recommended follow-up:
-Assessment:
-```
-
-The reporting objective is to document *what was observed*, distinguish that from *what is hypothesized*, and flag missing information—**not** to issue definitive engineering diagnoses.
 
 ## Notebook Walkthrough
 
@@ -440,6 +428,10 @@ RUNPOD_STOP_AFTER_REQUEST = true
 
 **More post-training does not automatically mean better task performance.** In this limited benchmark, instruction tuning improved required-field presence while reducing source-evidence completeness; preference optimization partly recovered that completeness but did not eliminate unsupported observations. By assessing **format, evidence retention, grounding and truncation separately**, this study makes those trade-offs visible rather than assuming later training stages must perform better.
 
----
+## Authorship, AI-Assisted Reference & Rights
 
-*Independent learning and research portfolio project. Evaluation annotations were AI-assisted and should be independently reviewed. The live document-assistant prototype is linked near the top; availability depends on the GPU backend.*
+**Independent work by Avantika Poddar.** The theoretical foundations, conceptual understanding, experimental design and applied research approach in this project arise from Avantika Poddar's independent learning.
+
+AI tools were used as **references to cross-check code logic, syntax, and implementation details**. AI-assisted evaluation annotations are identified as such in the methodology and are not presented as independently expert-validated results.
+
+**© 2026 Avantika Poddar. All rights reserved.** No general open-source license or permission to redistribute this project's original content is granted by this notice. Third-party software, pretrained models and any third-party content remain subject to their respective licenses and rights.
