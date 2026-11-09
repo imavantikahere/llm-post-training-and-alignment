@@ -1,0 +1,22 @@
+{
+  "branch": "B",
+  "base_model": "unsloth/Qwen2.5-1.5B-bnb-4bit",
+  "starting_checkpoint": "/content/drive/MyDrive/llm-post-training-experimental-study/models/stage1_non_instruction_adapter",
+  "adapter_path": "/content/drive/MyDrive/llm-post-training-experimental-study/models/stage2_domain_sft_adapter",
+  "dataset": "/content/drive/MyDrive/llm-post-training-experimental-study/data/processed/sft_prepared.jsonl",
+  "train_rows": 153,
+  "validation_rows": 27,
+  "seed": 42,
+  "max_length": 768,
+  "steps": 40,
+  "lora_r_requested": 16,
+  "lora_alpha_requested": 32,
+  "learning_rate": 0.0001,
+  "batch_size": 1,
+  "gradient_accumulation_steps": 4,
+  "train_loss": 1.3927148193120957,
+  "eval_loss": 1.0623928308486938,
+  "training_seconds": 76.74,
+  "peak_gpu_memory_allocated_gib": 1.382,
+  "gpu": "Tesla T4"
+}

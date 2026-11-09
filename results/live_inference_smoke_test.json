@@ -1,0 +1,27 @@
+{
+  "note": "During the morning shift, air compressor AC-562 exhibited intermittent rattling 15 minutes after startup. Discharge pressure varied from 6.2 to 7.1 bar, compared with the usual 6.8–7.2 bar. Slight oil residue was noticed near the lower housing but there was no active visible leak. Motor current was 18.4 A compared with the usual 16.5 A. Discharge temperature stayed at 74 C. Vibration and oil testing were not performed. The unit was taken offline at 10:35 pending inspection. No fault has been confirmed.",
+  "prompt_template": "notebook_05_exact",
+  "max_new_tokens": 350,
+  "outputs": {
+    "CPT": {
+      "response": "**Report Title:** Air Compressor AC-562 Maintenance Report\n\n**Observations:**\n- **Rattling:** The air compressor made a rattling sound intermittently during the observation period.\n- **Discharge Pressure:** The discharge pressure fluctuated between 6.2 and 7.1 bar, which is slightly lower than the usual range of 6.8 to 7.2 bar.\n- **Oil Residue:** A small amount of oil residue was detected near the lower housing, but no active leak was observed.\n- **Current:** The motor current recorded during the event was 18.4 A, slightly higher than the usual reading of 16.5 A.\n- **Temperature:** The discharge temperature remained stable at 74 C, but no direct measurement of cooling conditions is available.\n- **Missing Data:** Vibration and oil analysis were not performed during the shift.\n\n**Conclusion:**\n- The intermittent rattling may indicate a loose connection, bearing condition, or structural deformation.\n- The discharge pressure variation requires further investigation, especially if it persists or changes under different load conditions.\n- The presence of oil residue suggests a recent change, but definitive conclusions depend on traceability and absence of contamination.\n- The current reading deviates from the usual pattern but does not definitively identify a fault; trend consistency and comparison with reference readings are important.\n- The stable discharge temperature and absence of visible leaks support the equipment’s operational state rather than a fault.\n- For traceability, the report should include relevant work-order references, measurement locations, and post-event comparisons; missing data should be noted without speculation.\n\n**Recommendations:**\n- Conduct a detailed inspection and measurement for missing data, including vibration, oil",
+      "generated_tokens": 350,
+      "reached_token_limit": true,
+      "latency_seconds": 4.08
+    },
+    "SFT": {
+      "response": "Equipment: AC-562 (air compressor)\nReported issue: Vibration and discharge pressure fluctuation.\nObserved evidence: Vibration and discharge pressure fluctuation.\nPossible contributors (not confirmed): mechanical resonance, oil condition, or load.\nMissing information: vibration, oil condition, load, and pressure trend.\nRecommended follow-up: Request vibration and oil analysis.\nAssessment: Preliminary documentation only; no definitive fault diagnosis is supported by this note.",
+      "generated_tokens": 93,
+      "reached_token_limit": false,
+      "latency_seconds": 0.51
+    },
+    "DPO": {
+      "response": "Equipment: AC-562 (air compressor)\nReported issue: Vibration and discharge pressure fluctuation.\nObserved evidence: Discharge pressure varied from 6.2 to 7.1 bar, compared with the usual 6.8–7.2 bar. Slight oil residue was noticed near the lower housing but there was no active visible leak. Motor current was 18.4 A compared with the usual 16.5 A. Discharge temperature stayed at 74 C. Vibration and oil testing were not performed.\nPossible contributors (not confirmed): mechanical imbalance, oil condition, or load variation.\nMissing information: vibration, oil sample, load, and pressure trend.\nRecommended follow-up: Request authorized vibration and oil analysis.\nAssessment: Preliminary documentation only; no definitive fault diagnosis is supported by this note.",
+      "generated_tokens": 174,
+      "reached_token_limit": false,
+      "latency_seconds": 0.86
+    }
+  },
+  "model_family": "Qwen2.5-1.5B",
+  "evaluation_type": "live_inference_unreviewed"
+}

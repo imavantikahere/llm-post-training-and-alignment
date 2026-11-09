@@ -1,0 +1,5 @@
+stage,observation_recall_proxy,format_compliance_proxy,flagged_numeric_claims,mean_latency_s,cases
+Base Qwen,0.9233333333333335,0.0,1,2.134,10
+CPT,0.6883333333333332,0.0,1,2.653,10
+DPO,0.56,0.8428571428571429,0,1.345,10
+SFT,0.36333333333333334,0.8571428571428571,0,1.233,10
