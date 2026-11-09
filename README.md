@@ -1,6 +1,6 @@
-#  Industrial Maintainence Documentation Aid — An Experimental Project on LLM Post-Training & Alignment
+# Industrial Maintenance Document Assistant — An Experimental Analysis of LLM Post-Training and Fine-Tuning
 
-**Continued Pretraining (CFT) · Supervised Fine-Tuning (SFT) · Direct Preference Optimization (DPO) · Comparative Evaluation**
+**Continued Pretraining (CPT) · Supervised Fine-Tuning (SFT) · Direct Preference Optimization (DPO) · Comparative Evaluation**
 
 **Domain-specific industrial maintenance documentation assistant and LLM post-training research project.** This prototype transforms unstructured equipment observations and technician notes into structured **draft maintenance reports** for maintenance, operations, and reliability teams. It provides a consistent, reviewable format for reported symptoms, operating conditions, measurements, possible contributors, uncertainty, and suggested follow-up—**without claiming to diagnose equipment faults**.
 
@@ -28,7 +28,7 @@ Alongside the practical document-assistant use case, this independent study comp
 
 > During monitoring of centrifugal gas compressor K-204, vibration increased from 2.8 mm/s to 6.4 mm/s over 40 minutes. Discharge temperature rose from 82°C to 96°C while suction pressure remained steady at 18 bar. An intermittent noise was observed near the drive-end bearing. The compressor was placed on standby at 14:35 pending inspection. The cause is unconfirmed; no vibration spectrum analysis or internal inspection has been performed.
 
-**Availability:** The Streamlit dashboard and saved research results remain accessible when the RunPod GPU is stopped, but **new live reports require the FastAPI GPU backend to be running**. The current Pod deployment does not auto-start when a visitor clicks Generate.
+**Availability:** Saved benchmark views work when the RunPod GPU is stopped. On **Generate**, the configured Streamlit controller can resume the existing normal RunPod Pod, wait for FastAPI readiness, generate real Qwen reports, and request a stop afterward. A stopped-Pod-to-inference test succeeded on **9 November 2026**; future restarts depend on GPU capacity and health, and shutdown is best-effort.
 
 **Intended workflow:** This is a *drafting and comparison assistant*, not an autonomous maintenance decision-maker. A qualified engineer must check source fidelity and approve any documentation before organizational use. The current prototype is not a certified QA/QC report generator or fault-diagnosis system.
 
@@ -63,7 +63,9 @@ The next step was to understand what happens *after* pretraining: how a model is
 | **Google Colab + Google Drive** | GPU experimentation and checkpoint persistence |
 | **pandas / Matplotlib** | Comparative results, manual-audit exports and plots |
 | **Streamlit** | Deployed maintenance-document assistant UI, saved benchmark dashboard, live checkpoint comparisons |
-| **FastAPI + Uvicorn** | Authenticated job-based inference API (`POST /jobs`, `GET /jobs/{job_id}`) |\n| **RunPod + Network Volume** | GPU-hosted inference and persistent adapter/backend/model-cache storage |\n| **Git / GitHub** | Version control and documentation |
+| **FastAPI + Uvicorn** | Authenticated job-based inference API (`POST /jobs`, `GET /jobs/{job_id}`) |
+| **RunPod + Network Volume** | GPU-hosted inference and persistent adapter/backend/model-cache storage |
+| **Git / GitHub** | Version control and documentation |
 
 ## Scope of the Study
 
@@ -75,20 +77,24 @@ The project is an **educational experimental study**, not a production-ready mai
 
 ## Experimental Pipeline
 
+The four **separately saved** Qwen2.5-1.5B checkpoints follow sequential training, but inference loads **one stage at a time**; CPT, SFT and DPO adapters are not stacked during generation.
+
 ```mermaid
 flowchart TD
-    A[Qwen2.5-1.5B Base] --> B[Continued pretraining: domain text]
-    B --> C[Instruction SFT: structured reports]
-    C --> D[DPO: chosen vs rejected preferences]
-    A --> E[Common evaluation scenarios]
-    B --> E
-    C --> E
-    D --> E
-    E --> F[Evidence recall, format, grounding, truncation]
-    F --> G[Graphs + Streamlit evidence inspector]
+    Base["Base Qwen2.5-1.5B"] --> CPT["CPT: domain text, 300 paragraphs"]
+    CPT --> SFT["SFT: 180 instruction-report examples"]
+    SFT --> DPO["DPO: 120 preference pairs"]
+    Base --> Eval["Same 10 held-out synthetic scenarios"]
+    CPT --> Eval
+    SFT --> Eval
+    DPO --> Eval
+    Eval --> Rubric["Evidence preservation / 7 headings / unsupported claims / truncation"]
+    Rubric --> Results["Saved evaluation CSVs and Streamlit evidence inspector"]
 ```
 
-**Experimental-control note:** To isolate the *incremental benefit* of continued pretraining, a direct **Base → SFT** control is required alongside **Base → Continued Pretraining → SFT**. Without this control, the pipeline comparison does not establish that continued pretraining itself caused a downstream improvement.
+**Experimental control:** Without a direct **Base → SFT** comparator, this sequential study cannot establish CPT's independent causal effect.
+
+
 
 ## Datasets
 
@@ -204,6 +210,8 @@ The saved DPO adapter changed measurably, and the preference metric reached 100%
 
 ## Reproducing the Experiments
 
+For a precise directory inventory and Hugging Face dataset publication plan, see [Repository and dataset guide](REPOSITORY_AND_DATASETS.md).
+
 1. Clone the repository and open the notebooks in order in **Google Colab**.
 2. Prepare the three synthetic datasets and validate the processed JSONL columns.
 3. Select a compatible CUDA GPU for model training or inference.
@@ -237,25 +245,31 @@ The original base model and trained adapter weights are not embedded in these Ma
 
 This project includes an interactive **Streamlit research dashboard** and an optional live GPU inference service for comparing four checkpoints of Qwen2.5-1.5B: **Base Qwen, CPT, SFT, and DPO**. The live application is an educational demonstration, not a validated industrial maintenance or QA/QC decision system.
 
-### Low Level Architecture
+### Low-Level Inference Architecture
+
+Each selected model checkpoint is loaded **sequentially** against the same source note; the Base Qwen path is evaluated without an adapter.
+
 ```mermaid
 flowchart TD
-    A["👩‍💻 User enters maintenance note"] --> B["Streamlit frontend"]
-    B -->|"HTTPS request"| C["FastAPI backend on RunPod"]
-    C --> D["GPU inference engine"]
-    D --> E["Qwen2.5-1.5B base model"]
-    E --> F["Load your CPT adapter"]
-    E --> G["Load your SFT adapter"]
-    E --> H["Load your DPO adapter"]
-    F --> I["Generate CPT response"]
-    G --> J["Generate SFT response"]
-    H --> K["Generate DPO response"]
-    I --> L["Return results to Streamlit"]
-    J --> L
-    K --> L
-    L --> M["Display reports side by side"]
-
+    Note["Technician note + selected checkpoints"] --> UI["Streamlit / Try a new note"]
+    UI --> API["FastAPI authenticated POST /jobs"]
+    API --> Job["Background inference job"]
+    Job --> Engine["Sequential one-checkpoint-at-a-time GPU engine"]
+    Volume["Network Volume: Qwen cache + three LoRA adapters"] --> Engine
+    Engine --> Base["Base Qwen: no adapter"]
+    Engine --> CPT["Qwen + CPT adapter"]
+    Engine --> SFT["Qwen + SFT adapter"]
+    Engine --> DPO["Qwen + DPO adapter"]
+    Base --> Output["Text + token count + latency"]
+    CPT --> Output
+    SFT --> Output
+    DPO --> Output
+    Output --> API
+    API --> UI
+    UI --> Charts["Reports, charts, JSON / CSV downloads"]
 ```
+
+
 
 ### User interface
 
@@ -275,89 +289,120 @@ The live schema check counts the presence of the seven expected heading labels i
 
 ### Deployment architecture
 
+This is a **normal RunPod GPU Pod**, not a Serverless worker. The Pod ID is fixed in Streamlit Secrets; the controller does not choose another GPU type or provision a replacement Pod automatically.
+
 ```mermaid
 flowchart TD
-    U["Visitor / browser"] --> S["Streamlit Community Cloud<br/>app.py + saved benchmark data"]
-    S -->|"HTTPS POST /jobs<br/>Bearer API key"| F["FastAPI on RunPod GPU Pod<br/>backend.py"]
-    F -->|"enqueue job"| J["Inference job worker"]
-    J --> E["Transformers + PEFT engine"]
-    H["Hugging Face<br/>base-model repository + three LoRA adapter repositories"] -.->|"initial downloads / restores"| V["RunPod persistent Network Volume<br/>mounted at /workspace"]
-    V -->|"model adapters + HF cache + backend code"| E
-    E --> Q["Qwen2.5-1.5B base checkpoint"]
-    E --> A["Selected CPT / SFT / DPO LoRA adapter"]
-    Q --> R["Generated report + timing + token metadata"]
-    A --> R
-    R --> F
-    S -->|"GET /jobs/{job_id} polling"| F
-    F -->|"status and final JSON"| S
-    S --> D["Reports + charts + downloads"]
+    Click["Visitor clicks Generate"] --> Health{"Authenticated FastAPI /health ready?"}
+    Health -->|Yes| Job["POST /jobs"]
+    Health -->|No| Status["RunPod REST v2: get existing Pod status"]
+    Status --> State{"Pod stopped?"}
+    State -->|Yes| Resume["POST /v2/pods/ID/action with action=start"]
+    State -->|No| Wait["Poll FastAPI /health"]
+    Resume --> GPU{"GPU capacity available?"}
+    GPU -->|No| Error["Explain temporary inference unavailability"]
+    GPU -->|Yes| Boot["Pod boots; FastAPI startup required"]
+    Boot --> Wait
+    Wait --> Ready{"API ready within timeout?"}
+    Ready -->|Yes| Job
+    Ready -->|No| Error
+    Job --> Work["Sequential Qwen checkpoint generation"]
+    Work --> Poll["GET /jobs/job_id until completed"]
+    Poll --> Report["Show reports and live metrics"]
+    Report --> Stop{"Started by this request, auto-stop enabled?"}
+    Stop -->|Yes| StopAPI["POST /v2/pods/ID/action with action=stop"]
+    Stop -->|No| Keep["Existing running Pod left running"]
+    StopAPI --> Verify["Verify stopped in RunPod to avoid ongoing charges"]
+    Storage["Persistent Network Volume /workspace: adapters + cache + venv"] -.-> Boot
+    Storage -.-> Work
+    Saved["Streamlit benchmark CSVs"] --> Offline["Saved comparisons work without GPU"]
 ```
 
-**Roles:** Streamlit is the public frontend and renders evaluation results; FastAPI authenticates requests and manages asynchronous inference jobs; RunPod provides GPU hardware; Transformers and PEFT load Qwen and saved LoRA adapters; Hugging Face hosts model artifacts; the RunPod Network Volume preserves downloads and source files separately from any particular Pod.
+**Security:** RunPod management and FastAPI Bearer credentials stay server-side. Opening the Streamlit app does not start the Pod; clicking **Generate** does.
+
+
 
 ### Request lifecycle
 
-1. The visitor enters a maintenance note and selects checkpoints in Streamlit.
-2. Streamlit sends an authenticated `POST /jobs` request to the RunPod HTTPS proxy for port `8000`, specifying the note, stages and token limit. **The API key is stored in Streamlit Secrets, never in frontend source or the repository.**
-3. FastAPI validates its Bearer token against the server's `INFERENCE_API_KEY`, schedules the job and returns a job identifier.
-4. The inference engine loads the Qwen base weights and appropriate saved LoRA checkpoint(s), processing selected stages sequentially to reduce GPU memory pressure.
-5. Streamlit periodically polls `GET /jobs/{job_id}` until the job completes or fails.
-6. The server returns generated text and metadata; Streamlit renders reports, calculated structural/performance metrics, charts and downloads.
+1. The user enters a fictional note, selects checkpoints and clicks **Generate**.
+2. Streamlit checks authenticated `GET /health` on the configured Pod's port-8000 RunPod proxy.
+3. When auto-start is enabled and the Pod is stopped, `streamlit_app/pod_autostart.py` invokes **RunPod REST v2** `POST /v2/pods/{pod_id}/action` with `{"action":"start"}`. The previous `/pods/{pod_id}/start` route returned HTTP 404 and was corrected on 9 November 2026.
+4. The Pod must start FastAPI automatically; Streamlit waits up to 8 minutes for the health check. GPU capacity shortages and startup failures can still interrupt generation.
+5. Streamlit submits authenticated `POST /jobs` with note, selected stages and token limit. FastAPI enqueues one in-memory job and returns a job ID.
+6. Qwen2.5-1.5B runs each selected checkpoint **sequentially** (Base, CPT, SFT, DPO), without stacking separate LoRA adapters. Streamlit polls `GET /jobs/{job_id}`.
+7. The app displays outputs and live performance/heading metrics, and offers JSON/CSV exports. Saved benchmark scores are separate.
+8. When this request originally started the Pod, the controller **attempts** `{"action":"stop"}` on completion or failure.
+
+**Tested:** A stopped-Pod-to-live-inference cycle succeeded on 9 November 2026. **Not guaranteed:** GPU availability, successful restart, stop delivery, or hard billing protection. A previously running Pod is intentionally not stopped by this controller; Streamlit crashes may skip the stop request. Soft per-process request counters can reset when Streamlit restarts.
+
+
 
 ### Storage and reproducibility
 
-A **RunPod Network Volume** is mounted at `/workspace` in the selected data center. The project uses these locations:
+A 30 GB **RunPod Network Volume** retains the inference assets independent of Pod lifecycle:
 
 ```text
 /workspace/
-  llm-post-training-service/backend/    # FastAPI source, requirements, startup script
-  llm-post-training/models/             # saved CPT/SFT/DPO LoRA adapter folders
-  hf-cache/                              # cached pretrained model and tokenizer files
-  persistence_test.txt                   # optional restart-verification marker
+  llm-post-training-service/
+    backend/                  # deployed backend + boot_pod.sh + start_api.sh + requirements-api.txt
+    runtime/venv/             # persistent CUDA/PyTorch/PEFT/Unsloth/FastAPI Python environment
+    logs/                     # FastAPI startup logs
+  llm-post-training/models/   # three saved LoRA adapter directories
+  hf-cache/                   # Qwen model/tokenizer cache
+  persistence_test.txt        # optional persistence sentinel
 ```
 
-Network volumes persist across Pod stop and termination **as long as the network volume itself is retained**. Unlike this persistent storage, the running FastAPI service, shell environment variables, and packages installed on the container disk may need to be restored when a Pod is recreated. Keep a version-controlled copy of the backend on GitHub and model artifacts on Hugging Face as independent backups.
-
-Check the volume from inside the Pod:
+The Python virtual environment in `runtime/venv` successfully installed and reported **CUDA: True** on 9 November 2026. It remains reusable across container resets with a compatible Python/CUDA image, unlike container-local Python packages. Network Volume storage stays billable while stopped and is tied to its data center.
 
 ```bash
 findmnt -T /workspace -o TARGET,SOURCE,FSTYPE
+df -h /workspace
 find /workspace/llm-post-training/models -name adapter_config.json
-ls -lah /workspace/llm-post-training-service/backend
-DF_OUT=$(df -h /workspace); printf '%s\n' "$DF_OUT"
+ls /workspace/llm-post-training-service/runtime/venv/bin/python
 ```
 
-The accompanying `verify_runpod_persistence.sh` script checks the mount, expected files and available storage, and writes a harmless sentinel. **The sentinel must be read again after stopping/restarting a Pod to verify persistence empirically.**
+The adapters are also backed up as private Hugging Face **model** repositories. Do not commit trained weights, credentials or sensitive equipment records.
+
+
 
 ### Backend start and public endpoint
 
-The current deployed Pod uses a manual backend startup procedure (automatic startup is planned but **not yet implemented**):
+| File | Role |
+|---|---|
+| `streamlit_app/app.py` | Maintenance UI, saved benchmark, live model comparison |
+| `streamlit_app/pod_autostart.py` | On-demand normal-Pod start, readiness checks, best-effort stop |
+| `gpu_backend/backend.py` | Authenticated FastAPI health, jobs and status |
+| `gpu_backend/inference_engine.py` | Loads Base Qwen / CPT / SFT / DPO for actual inference |
+| `gpu_backend/requirements-api.txt` | Full GPU inference Python dependencies |
+| `gpu_backend/boot_pod.sh` | Persistent Python environment and backend startup wrapper |
+| `gpu_backend/start_runpod.sh` | Manual backend-start alternative for the GitHub backend layout |
 
-```bash
-cd /workspace/llm-post-training-service/backend
-python -m pip install -r requirements-api.txt  # if dependencies were lost with the container
-export PROJECT_ROOT=/workspace/llm-post-training
-export HF_HOME=/workspace/hf-cache
-# Supply INFERENCE_API_KEY securely; do not commit or print it.
-bash start_api.sh
-```
+Expose RunPod **HTTP port 8000**, set `INFERENCE_API_KEY` on the Pod, and ensure the actual container startup hook launches FastAPI on Pod boot. A mere RunPod Start command passed as arguments to `/start.sh` may not execute; FileBrowser images have different entrypoint/post-start behavior. Test an authenticated `GET /health` returning HTTP 200. If automated startup fails, inspect the persistent `llm-post-training-service/logs` folder, and use the current deployed `start_api.sh` as a manual recovery path.
 
-The Pod must expose **HTTP port 8000**. Verify `GET /health` locally and via the RunPod proxy before using the UI. A request to `POST /jobs` without a valid Bearer key should be rejected with `401`.
-
-Streamlit Community Cloud Secrets (not GitHub source) contain:
+**Streamlit Community Cloud Secrets** (placeholders only):
 
 ```toml
-GPU_API_URL = "https://<CURRENT-POD-ID>-8000.proxy.runpod.net"
-GPU_API_KEY = "<SAME-SECRET-AS-INFERENCE_API_KEY>"
+GPU_API_URL = "https://YOUR-POD-ID-8000.proxy.runpod.net"
+GPU_API_KEY = "YOUR-FASTAPI-INFERENCE-KEY"
+RUNPOD_AUTO_START = true
+RUNPOD_POD_ID = "YOUR-POD-ID"
+RUNPOD_API_KEY = "YOUR-RUNPOD-MANAGEMENT-KEY"
+RUNPOD_STOP_AFTER_REQUEST = true
 ```
 
-The Pod ID / proxy URL changes if a replacement Pod is created, so update `GPU_API_URL` accordingly. The public app URL is the deployed `*.streamlit.app` URL (copy it via **Share** in the running Streamlit app), **not** the RunPod proxy.
+`GPU_API_KEY` must match Pod `INFERENCE_API_KEY`. `RUNPOD_API_KEY` is a separate RunPod management credential. A newly created replacement Pod requires updating both `RUNPOD_POD_ID` and `GPU_API_URL`. Neither secret belongs in GitHub.
+
+
 
 ### Availability, cost and security
 
-The **Streamlit website and saved benchmark views remain available when the GPU Pod is stopped**, but new live inference requests do not. A running RunPod Pod accrues GPU compute charges even when nobody is submitting requests; stopping the Pod stops GPU compute charges, while network-volume storage remains billable. This architecture is **not currently scale-to-zero**. For on-demand public inference, a separate RunPod Serverless deployment and frontend API changes would be required.
+- Static Streamlit benchmark pages are available while the GPU is stopped.
+- On **Generate**, the controller resumes the **configured normal Pod** rather than dynamically choosing new GPUs or using Serverless. When the Pod was stopped its previous GPU reservation was released; future capacity is not assured.
+- RunPod GPU compute billing continues whenever the Pod is running, even without inference. Network Volume storage remains billed while stopped. An auto-stop request is **best-effort**, not a hard expenditure cap.
+- One-at-a-time locking and per-process limits are not durable quota controls. Add independent runtime limits, account budget alerts and durable rate limiting before unrestricted public usage.
+- No hosted Hugging Face explanation requests are made by the checkpoint comparison. Real inference runs saved Qwen weights; synthetic benchmark reports are separate.
+- Keep management keys, FastAPI keys and HF tokens in managed secrets; rotate any that are exposed.
 
-Before sharing the demo widely, add request limits, concurrency limits, expenditure controls and an informative GPU-offline message. Never publish Hugging Face tokens, `INFERENCE_API_KEY`, `GPU_API_KEY`, private notes or production plant data. Rotate any credential accidentally exposed in screenshots or Git history.
 
 
 ## Limitations & Responsible Use
