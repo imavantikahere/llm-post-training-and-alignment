@@ -345,10 +345,9 @@ Deploy a **separate** Streamlit Community Cloud app with main file path `streaml
 ```toml
 SERVERLESS_ENDPOINT_ID = "YOUR_RUNPOD_SERVERLESS_ENDPOINT_ID"
 SERVERLESS_API_KEY = "YOUR_RUNPOD_API_KEY"
-SERVERLESS_DEMO_PASSWORD = "YOUR_PRIVATE_DEMO_ACCESS_CODE"
 ```
 
-The optional demo access code protects the paid **Generate** action during testing. It is **not a durable rate limit or account-level spending cap**. Do not commit credentials or share them in screenshots.
+The live **Generate** action has **no visitor password gate**. Anyone with access to the deployed Streamlit app can trigger billable GPU jobs. Restrict app access or add a robust authenticated usage quota before broad public sharing; **max workers = 1 is not a spending cap**. Do not commit credentials or share them in screenshots.
 
 ### Prior implementation — normal RunPod Pod + FastAPI (retained)
 
@@ -360,8 +359,8 @@ Normal-Pod secrets (`GPU_API_URL`, `GPU_API_KEY`, `RUNPOD_POD_ID`, `RUNPOD_API_K
 
 - **Scale-to-zero is not a GPU guarantee:** Capacity shortages, cold-start image downloads, regional Network Volume restrictions and worker errors can delay or prevent requests.
 - **Workers may incur charges during startup, execution and idle transitions.** The volume may continue accruing storage costs even with zero running workers. The observed A40 console rate during testing was **$0.00034/s** (approximately **$1.22/hr** at that rate); current pricing should be verified in RunPod before reuse.
-- **Max workers = 1 limits concurrency, not cumulative spending.** The $20 testing budget is a personal target, not a hard billing control. Avoid unrestricted public inference without durable quotas, authentication and monitoring.
-- **Security:** RunPod API keys live server-side in Streamlit Secrets; trained checkpoints and persistent storage are not exposed to visitors. An access code can restrict demo use, but further security and abuse controls are required for production.
+- **Max workers = 1 limits concurrency, not cumulative spending.** The $20 testing budget is a personal target, not a hard billing control. The Streamlit inference tab has **no visitor password**; avoid unrestricted public sharing without durable quotas, authentication and monitoring.
+- **Security:** RunPod API keys live server-side in Streamlit Secrets; trained checkpoints and persistent storage are not exposed to visitors. There is **no inference access-code field**; appropriate authentication, abuse controls and usage limits are needed before broad public availability.
 - **Evaluation integrity:** New live reports produce latency/token/heading-presence metrics but **do not inherit the saved benchmark's evidence-retention or unsupported-claim scores**. Technical recommendations remain unverified drafting suggestions.
 
 ## Limitations & Responsible Use
