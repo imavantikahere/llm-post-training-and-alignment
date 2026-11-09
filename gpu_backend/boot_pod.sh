@@ -15,7 +15,7 @@ mkdir -p "$LOG_DIR" "$RUNTIME" "$HF_HOME"
 (
   set -Eeuo pipefail
   echo "===== FastAPI boot $(date -u +%FT%TZ) ====="
-  if [[ -z "$INFERENCE_API_KEY" ]]; then
+  if [[ ! -v INFERENCE_API_KEY || -z "$INFERENCE_API_KEY" ]]; then
     echo "ERROR: INFERENCE_API_KEY is not set"
     exit 1
   fi
