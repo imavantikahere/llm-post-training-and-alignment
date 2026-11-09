@@ -16,6 +16,7 @@ from pathlib import Path
 
 import requests
 import pandas as pd
+import altair as alt
 import streamlit as st
 
 
@@ -27,6 +28,8 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 
 STAGES = ["Base Qwen", "CPT", "SFT", "DPO"]
+MODEL_COLORS = {"Base Qwen": "#4E8FBE", "CPT": "#83BDE6", "SFT": "#A68DDB", "DPO": "#E8A3C7"}
+
 
 # Original seven fields used for the saved research benchmark.
 REQUIRED_FIELDS = [
@@ -52,7 +55,7 @@ LIVE_REPORT_FIELDS = [
 ]
 
 st.set_page_config(
-    page_title="LLM Post-Training Lab",
+    page_title="Industrial Maintenance Document Assistant",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -61,27 +64,54 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .block-container {
-        padding-top: 1.65rem;
-        padding-bottom: 3rem;
-        max-width: 1350px;
+    html, body, .stApp, [data-testid="stAppViewContainer"] {
+        background: #C6E3F8 !important;
+        color: #244B70 !important;
     }
-
+    [data-testid="stHeader"] { background: rgba(198,227,248,.94) !important; }
+    [data-testid="stSidebar"], [data-testid="stSidebar"] > div:first-child {
+        background: #B3D7F1 !important;
+    }
+    .block-container { padding-top: 1.7rem; padding-bottom: 3rem; max-width: 1320px; }
+    h1, h2, h3, h4, p, label, .stMarkdown { color: #244B70; }
     [data-testid="stMetric"] {
-        border: 1px solid rgba(140,140,140,.22);
-        border-radius: 14px;
-        padding: 14px 18px;
+        background: #EAF6FF; border: 1px solid #A7D0EB;
+        border-radius: 15px; padding: 14px 18px;
     }
-
-    .small-note {
-        color: #8b96a9;
-        font-size: 0.85rem;
+    [data-testid="stTextArea"] textarea,
+    [data-testid="stTextInput"] input,
+    [data-baseweb="select"] > div,
+    [data-testid="stCodeBlock"] pre,
+    [data-testid="stExpander"] details {
+        background: #EAF6FF !important;
+        color: #244B70 !important;
+        border-color: #9FCBE8 !important;
+        border-radius: 12px !important;
     }
-
-    .case-header {
-        font-size: 1.03rem;
-        font-weight: 650;
-        margin-bottom: 0.25rem;
+    [data-testid="stBaseButton-primary"] {
+        background: #407FB0 !important; color: white !important;
+        border-radius: 12px !important;
+    }
+    [data-testid="stTabs"] button[aria-selected="true"] {
+        color: #244B70 !important; border-bottom-color: #407FB0 !important;
+    }
+    .hero-panel {
+        padding: 25px 30px;
+        background: linear-gradient(115deg,#D7EDFD,#EAF6FF);
+        border: 1px solid #A6CDEB; border-radius: 21px; margin-bottom: 20px;
+    }
+    .hero-eyebrow { color: #527FA3; font-size: .78rem; font-weight: 700; letter-spacing: .12em; }
+    .hero-title { color: #173E63; font-weight: 750; font-size: 2.3rem; line-height: 1.17; margin: .55rem 0; }
+    .hero-subtitle { color: #346B96; font-size: 1.12rem; font-weight: 600; }
+    .soft-card {
+        background: #EAF6FF; padding: 18px 20px;
+        border: 1px solid #A7D0EB; border-radius: 15px;
+        min-height: 135px; margin: 5px 0;
+    }
+    .soft-card p, .soft-card strong { color: #244B70; }
+    .stage-flow {
+        background: #EAF6FF; padding: 17px; border-radius: 14px;
+        border: 1px solid #A7D0EB; color: #244B70;
     }
     </style>
     """,
@@ -277,29 +307,21 @@ def show_report(text: str):
 # 4. NEW — LIVE INFERENCE METRICS
 # ============================================================
 
-def count_live_report_fields(response: str) -> int:
-    """
-    Count the headings of the live seven-field report.
-
-    Structural check only.
-    No factual accuracy or evidence-recall claim.
-    """
+def live_field_detected(response: str, field: str) -> bool:
+    """Match live headings and explicitly allowed qualified variants."""
     if not isinstance(response, str):
-        return 0
+        return False
+    suffix = r"(?:\s*\(not confirmed\))?" if field == "Possible causes" else ""
+    return bool(re.search(
+        r"^\s*" + re.escape(field) + suffix + r"\s*:",
+        response,
+        flags=re.IGNORECASE | re.MULTILINE,
+    ))
 
-    return sum(
-        bool(
-            re.search(
-                r"^\s*"
-                + re.escape(field)
-                + r"\s*:",
-                response,
-                flags=re.IGNORECASE | re.MULTILINE,
-            )
-        )
-        for field in LIVE_REPORT_FIELDS
-    )
 
+def count_live_report_fields(response: str) -> int:
+    """Structural presence only, not an evidence-accuracy score."""
+    return sum(live_field_detected(response, field) for field in LIVE_REPORT_FIELDS)
 
 def safe_number(value):
     """Convert a numeric API value safely."""
@@ -394,6 +416,30 @@ def build_live_metrics(outputs: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def colored_live_bar_chart(df: pd.DataFrame, field: str, axis_title: str, maximum=None):
+    """Fixed model order and colors across all live charts."""
+    chart_data = df[["Model", field]].dropna()
+    if chart_data.empty:
+        st.info("No data returned for this metric.")
+        return
+    chart = (
+        alt.Chart(chart_data)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .encode(
+            x=alt.X("Model:N", sort=STAGES, title=None, axis=alt.Axis(labelAngle=0)),
+            y=alt.Y(field + ":Q", title=axis_title,
+                    scale=alt.Scale(domain=[0, maximum]) if maximum else alt.Scale(zero=True)),
+            color=alt.Color("Model:N",
+                            scale=alt.Scale(domain=STAGES,
+                                            range=[MODEL_COLORS[m] for m in STAGES]),
+                            legend=None),
+            tooltip=[alt.Tooltip("Model:N"), alt.Tooltip(field + ":Q", format=".2f")],
+        )
+        .properties(height=300)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+
 def show_live_comparison(outputs: dict):
     """
     Display charts after actual live inference.
@@ -464,11 +510,7 @@ def show_live_comparison(outputs: dict):
         )
 
         if not latency_df.empty:
-            st.bar_chart(
-                latency_df,
-                y_label="Seconds",
-                use_container_width=True,
-            )
+            colored_live_bar_chart(df, "Latency (s)", "Seconds")
         else:
             st.info(
                 "Latency measurements were not returned by the API."
@@ -494,11 +536,7 @@ def show_live_comparison(outputs: dict):
         )
 
         if not speed_df.empty:
-            st.bar_chart(
-                speed_df,
-                y_label="Tokens per second",
-                use_container_width=True,
-            )
+            colored_live_bar_chart(df, "Tokens/sec", "Tokens per second")
         else:
             st.info(
                 "Generation speed could not be calculated."
@@ -522,14 +560,10 @@ def show_live_comparison(outputs: dict):
             ["Live report fields"]
         ]
 
-        st.bar_chart(
-            schema_df,
-            y_label="Headings detected (out of 7)",
-            use_container_width=True,
-        )
+        colored_live_bar_chart(df, "Live report fields", "Headings detected (out of 7)", maximum=7)
 
         st.caption(
-            "Counts exact headings from the live seven-field "
+            "Counts approved headings from the live seven-field "
             "maintenance-report format. This is a deterministic "
             "structural check, not factual accuracy."
         )
@@ -559,11 +593,7 @@ def show_live_comparison(outputs: dict):
         )
 
         if not tokens_df.empty:
-            st.bar_chart(
-                tokens_df,
-                y_label="Generated tokens",
-                use_container_width=True,
-            )
+            colored_live_bar_chart(df, "Generated tokens", "Generated tokens")
         else:
             st.info(
                 "Token counts were not returned by the API."
@@ -593,18 +623,7 @@ def show_live_comparison(outputs: dict):
         )
 
         for field in LIVE_REPORT_FIELDS:
-            detected = bool(
-                re.search(
-                    r"^\s*"
-                    + re.escape(field)
-                    + r"\s*:",
-                    response,
-                    flags=(
-                        re.IGNORECASE
-                        | re.MULTILINE
-                    ),
-                )
-            )
+            detected = live_field_detected(response, field)
 
             detail_rows.append(
                 {
@@ -916,7 +935,7 @@ scenario_ids = list(
 # ============================================================
 
 with st.sidebar:
-    st.title("🧪 Post-Training Lab")
+    st.title("🩵 Maintenance AI Lab")
 
     st.caption(
         "Qwen2.5-1.5B · 4 checkpoints · "
@@ -958,16 +977,114 @@ with st.sidebar:
 
 if page == "Research overview":
 
-    st.title("LLM Post-Training & Alignment")
-
-    st.write(
-        "**An interactive study of what CPT, SFT, "
-        "and DPO change—and what they don't.**"
+    st.markdown(
+        """
+        <section class="hero-panel">
+          <div class="hero-eyebrow">INDUSTRIAL AI · DOCUMENTATION ASSISTANT</div>
+          <div class="hero-title">Industrial Maintenance Document Assistant</div>
+          <div class="hero-subtitle">An Experimental Analysis of LLM Post-Training and Fine-Tuning</div>
+          <p>Turn raw equipment observations into clearer draft maintenance reports, while comparing domain-adapted AI models.</p>
+        </section>
+        """,
+        unsafe_allow_html=True,
     )
 
+    st.header("For maintenance, reliability and operations teams")
+    st.write(
+        "Technician observations are often recorded as unstructured notes. "
+        "This experimental assistant helps convert them into structured **draft maintenance reports** "
+        "that are easier to review and compare. It helps document measurements, symptoms, "
+        "actions already taken and unknowns, but **does not diagnose equipment faults**."
+    )
+
+    st.subheader("How to use the application")
+    usage_steps = [
+        ("01 · Enter a technician note",
+         "Paste a fictional or non-confidential observation with equipment ID, measurements, symptoms, timestamps, actions and unknowns."),
+        ("02 · Choose checkpoints",
+         "Try SFT for a structured draft, or select Base Qwen, CPT, SFT and DPO to compare different post-training stages."),
+        ("03 · Generate reports",
+         "Open 'Try a new note' and click Generate. Live results require the RunPod GPU backend to be online."),
+        ("04 · Review and download",
+         "Verify facts against the original note, compare the reports and charts, then download JSON outputs or CSV metrics."),
+    ]
+    for i in range(0, len(usage_steps), 2):
+        cols = st.columns(2)
+        for col, (heading, description) in zip(cols, usage_steps[i:i+2]):
+            with col:
+                st.markdown(
+                    f'<div class="soft-card"><strong>{heading}</strong><p>{description}</p></div>',
+                    unsafe_allow_html=True,
+                )
+
+    st.info(
+        "**Example fictional input:** Gas compressor K-204 experienced increased vibration. "
+        "Discharge temperature reached 96°C, suction pressure remained steady at 18 bar, "
+        "and the unit was placed on standby at 14:35. The root cause remains unconfirmed."
+    )
+    st.warning(
+        "Educational documentation prototype only. Do not use real confidential plant records, "
+        "authorize maintenance, or treat AI output as a certified QA/QC report."
+    )
+
+    st.subheader("Explore the application")
+    st.markdown(
+        """
+        | Section | What it does |
+        |---|---|
+        | **Checkpoint comparison** | Side-by-side saved model outputs for the same scenario, with review flags and evidence recall. |
+        | **Evidence & error inspector** | See which source observations were preserved or omitted, plus AI-assisted error flags. |
+        | **Try your own maintenance note** | Generate fresh draft reports with selected Qwen checkpoints; compare latency, token use and report structure. |
+        | **Research overview** | Learn the use case, training stages, and saved evaluation results. |
+        | **Methods & limits** | Read the scoring definitions, caveats, and reproducibility details. |
+        """
+    )
     st.caption(
-        "Base Qwen → continued pretraining (CPT) → "
-        "instruction SFT → direct preference optimization (DPO)"
+        "Saved benchmark pages work while the GPU is offline. New generations require a running RunPod backend."
+    )
+
+    st.divider()
+    st.header("Behind the AI: an experiment in post-training")
+    st.write(
+        "This project compares four Qwen2.5-1.5B checkpoints to investigate whether additional "
+        "training improves format, preservation of source evidence, and restraint around uncertain claims."
+    )
+    st.markdown(
+        '<div class="stage-flow"><strong>Base Qwen</strong> → '
+        '<strong>CPT</strong> (domain text) → '
+        '<strong>SFT</strong> (example reports) → '
+        '<strong>DPO</strong> (chosen/rejected preferences)<br>'
+        '<small>Each saved checkpoint is evaluated on the same test scenarios.</small></div>',
+        unsafe_allow_html=True,
+    )
+    with st.expander("What do Base Qwen, CPT, SFT and DPO mean?", expanded=True):
+        st.markdown(
+            """
+            **Base Qwen — Starting model:** General language model before this project's maintenance-specific training.
+
+            **CPT (Continued Pretraining) — Domain adaptation:** Additional next-token training on industrial maintenance text helps the model learn domain terminology and patterns.
+
+            **SFT (Supervised Fine-Tuning) — Structured instructions:** Trains on example technician-note → report pairs to encourage consistent reporting.
+
+            **DPO (Direct Preference Optimization) — Preferred responses:** Trains using chosen/rejected response pairs, encouraging cautious and evidence-aware outputs. Unlike PPO-based RLHF, this does not require a separate reward model.
+            """
+        )
+        st.caption("These are training objectives, not guarantees of better factual accuracy.")
+    with st.expander("LoRA and QLoRA — how were the models trained efficiently?"):
+        st.write(
+            "LoRA learns small, low-rank adapter matrices instead of updating all base-model weights. "
+            "QLoRA uses quantized base weights alongside trainable adapters to reduce memory requirements."
+        )
+        st.code("Frozen base model (W₀) + low-rank update (B × A) → adapted checkpoint", language=None)
+        st.caption(
+            "SFT learns from a target answer; DPO learns from which of two answers is preferred."
+        )
+
+    st.divider()
+    st.header("Experimental evaluation — saved benchmark")
+    st.caption(
+        "10 synthetic scenarios per checkpoint (40 reports); AI-assisted review labels. "
+        "Historical evaluation is separate from newly generated live responses."
     )
 
     a, b, c, d = st.columns(4)
@@ -1124,6 +1241,25 @@ if page == "Research overview":
         "labels. They do not establish industrial safety "
         "or statistically significant model superiority."
     )
+
+    with st.expander("Additional insights from the saved test set and live demos"):
+        st.markdown(
+            """
+            - **Format versus evidence:** SFT and DPO achieved full seven-heading presence in the saved benchmark,
+              while Base Qwen preserved more source observations.
+            - **DPO trade-off:** Evidence preservation was 58.3% for DPO versus 42.7% for SFT,
+              but 3/10 DPO reports were flagged for unsupported observations.
+            - **CPT limitation:** Without a direct Base → SFT control, the study cannot isolate CPT's contribution.
+            - **Live compressor K-204:** Base Qwen explicitly retained the 2.8 → 6.4 mm/s vibration
+              rise and 82 → 96°C temperature change; a CPT response introduced an unsupported statement
+              about load/cooling conditions.
+            - **Live pump P-642:** An SFT response followed the report format but omitted some original
+              operating details and uncertainty qualifiers.
+            """
+        )
+        st.caption(
+            "Live demos are qualitative examples, not additional expert-reviewed benchmark scores."
+        )
 
 
 # ============================================================
@@ -1705,16 +1841,18 @@ elif page == "Try a new note":
 
         outputs = result["outputs"]
 
+        display_stages = [stage for stage in STAGES if stage in chosen]
+
         for i in range(
             0,
-            len(chosen),
+            len(display_stages),
             2,
         ):
             columns = st.columns(2)
 
             for column, stage in zip(
                 columns,
-                chosen[i:i + 2],
+                display_stages[i:i + 2],
             ):
 
                 if stage not in outputs:
@@ -1723,7 +1861,12 @@ elif page == "Try a new note":
                 item = outputs[stage]
 
                 with column:
-                    st.subheader(stage)
+                    st.markdown(
+                        f'<div style="background:{MODEL_COLORS[stage]};border-radius:9px;'
+                        'padding:7px 12px;color:#173E63;font-weight:700;margin-bottom:9px">'
+                        f'{stage}</div>',
+                        unsafe_allow_html=True,
+                    )
 
                     st.caption(
                         f"{item.get('generated_tokens', '?')} "
