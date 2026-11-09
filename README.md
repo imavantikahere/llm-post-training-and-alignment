@@ -12,7 +12,7 @@ Alongside the practical document-assistant use case, this independent study comp
 
 # Try it out 
 
-**Prototype link:** https://llm-post-training-and-alignment-aug26.streamlit.app/
+**Interactive prototype:** The live inference deployment uses the separate Streamlit Serverless entrypoint [`streamlit_app/serverless_app.py`](streamlit_app/serverless_app.py). The [original Streamlit prototype](https://llm-post-training-and-alignment-aug26.streamlit.app/) remains in the repository's prior Pod-based setup; availability and current backend configuration may differ. The Serverless frontend is deployed separately; its public URL is not recorded here.
 
 ### How to use the maintenance document assistant
 
@@ -28,7 +28,7 @@ Alongside the practical document-assistant use case, this independent study comp
 
 > During monitoring of centrifugal gas compressor K-204, vibration increased from 2.8 mm/s to 6.4 mm/s over 40 minutes. Discharge temperature rose from 82°C to 96°C while suction pressure remained steady at 18 bar. An intermittent noise was observed near the drive-end bearing. The compressor was placed on standby at 14:35 pending inspection. The cause is unconfirmed; no vibration spectrum analysis or internal inspection has been performed.
 
-**Availability:** Saved benchmark views work when the RunPod GPU is stopped. On **Generate**, the configured Streamlit controller can resume the existing normal RunPod Pod, wait for FastAPI readiness, generate real Qwen reports, and request a stop afterward. A stopped-Pod-to-inference test succeeded on **9 November 2026**; future restarts depend on GPU capacity and health, and shutdown is best-effort.
+**Availability:** The saved benchmark views do not require a GPU. The **current live inference implementation** uses RunPod **Queue Serverless (Flex)**: Streamlit submits an asynchronous job, polls its status, and displays actual Qwen generations returned by an on-demand GPU worker. A live Serverless SFT request and an end-to-end Streamlit-to-Serverless multi-checkpoint request **completed successfully on 9 November 2026**. Flex workers can scale to zero, but cold starts, regional GPU shortages, failures and usage charges are still possible. The earlier normal-Pod implementation is preserved as a legacy alternative.
 
 **Intended workflow:** This is a *drafting and comparison assistant*, not an autonomous maintenance decision-maker. A qualified engineer must check source fidelity and approve any documentation before organizational use. The current prototype is not a certified QA/QC report generator or fault-diagnosis system.
 
@@ -46,7 +46,7 @@ The next step was to understand what happens *after* pretraining: how a model is
 2. Use **instruction SFT** to teach structured maintenance-report generation.
 3. Apply **DPO** to train on chosen/rejected response preferences emphasizing evidence-grounded, uncertainty-aware reporting.
 4. Compare the saved checkpoints on consistent maintenance scenarios, separating **formatting, evidence completeness, unsupported claims, and preference discrimination**.
-5. Build and deploy an **interactive Streamlit maintenance-document assistant** presenting saved evaluation findings and providing **live GPU inference** across Base Qwen, CPT, SFT, and DPO checkpoints through an authenticated FastAPI/RunPod backend.
+5. Build and deploy an **interactive Streamlit maintenance-document assistant** presenting saved evaluation findings and providing **live GPU inference** across Base Qwen, CPT, SFT, and DPO checkpoints using RunPod Serverless Queue workers (with the earlier FastAPI/Pod implementation retained for reference).
 
 ## Technology Stack
 
@@ -63,8 +63,10 @@ The next step was to understand what happens *after* pretraining: how a model is
 | **Google Colab + Google Drive** | GPU experimentation and checkpoint persistence |
 | **pandas / Matplotlib** | Comparative results, manual-audit exports and plots |
 | **Streamlit** | Deployed maintenance-document assistant UI, saved benchmark dashboard, live checkpoint comparisons |
-| **FastAPI + Uvicorn** | Authenticated job-based inference API (`POST /jobs`, `GET /jobs/{job_id}`) |
-| **RunPod + Network Volume** | GPU-hosted inference and persistent adapter/backend/model-cache storage |
+| **RunPod Serverless (Queue / Flex)** | Current on-demand GPU inference, asynchronous `/run` submission and `/status/{job_id}` polling, scale-to-zero workers |
+| **Docker + RunPod GitHub image builds** | Reproducible worker image, including C/C++ build tools required for Unsloth/Triton compilation |
+| **RunPod Network Volume** | Persistent Qwen base-model cache and three separately saved LoRA adapters shared with Serverless workers |
+| **FastAPI + Uvicorn (legacy Pod path)** | Earlier authenticated job API (`POST /jobs`, `GET /jobs/{job_id}`), retained in repository but not the current Serverless request path |
 | **Git / GitHub** | Version control and documentation |
 
 ## Scope of the Study
@@ -247,29 +249,34 @@ This project includes an interactive **Streamlit research dashboard** and an opt
 
 ### Low-Level Inference Architecture
 
-Each selected model checkpoint is loaded **sequentially** against the same source note; the Base Qwen path is evaluated without an adapter.
+The **current live demo** uses **RunPod Serverless Queue-based Flex workers**, not a permanently running GPU Pod. Streamlit submits an authenticated job to RunPod's API, polls its status, and renders the report and live comparison metrics. The worker uses the existing `gpu_backend/inference_engine.py`; each selected checkpoint is evaluated **sequentially**, without stacking the separately saved adapters.
 
 ```mermaid
 flowchart TD
-    Note["Technician note + selected checkpoints"] --> UI["Streamlit / Try a new note"]
-    UI --> API["FastAPI authenticated POST /jobs"]
-    API --> Job["Background inference job"]
-    Job --> Engine["Sequential one-checkpoint-at-a-time GPU engine"]
-    Volume["Network Volume: Qwen cache + three LoRA adapters"] --> Engine
-    Engine --> Base["Base Qwen: no adapter"]
+    Note["Fictional technician note + checkpoint selection"] --> UI["Streamlit: serverless_app.py"]
+    UI --> Client["serverless_client.py: authenticated RunPod Queue API"]
+    Client --> Queue["POST /v2/ENDPOINT_ID/run"]
+    Queue --> Worker["RunPod Serverless Flex GPU worker"]
+    Worker --> Handler["serverless/handler.py"]
+    Handler --> Engine["Qwen2.5-1.5B inference_engine.py"]
+    Volume["RunPod Network Volume: cached base model + CPT/SFT/DPO adapters"] --> Engine
+    Engine --> Base["Base Qwen (no adapter)"]
     Engine --> CPT["Qwen + CPT adapter"]
     Engine --> SFT["Qwen + SFT adapter"]
     Engine --> DPO["Qwen + DPO adapter"]
-    Base --> Output["Text + token count + latency"]
-    CPT --> Output
-    SFT --> Output
-    DPO --> Output
-    Output --> API
-    API --> UI
-    UI --> Charts["Reports, charts, JSON / CSV downloads"]
+    Base --> Result["Report + generated tokens + latency"]
+    CPT --> Result
+    SFT --> Result
+    DPO --> Result
+    Result --> Poll["GET /v2/ENDPOINT_ID/status/JOB_ID"]
+    Poll --> UI
+    UI --> Charts["Live reports, comparison charts, JSON/CSV exports"]
+    Saved["Saved benchmark CSVs"] --> UI
 ```
 
+**Why Serverless?** The original approach used a **normal RunPod Pod** with persistent Network Volume storage and automatic start/stop through RunPod's Pod API. The volume preserved weights, adapters and the Python environment, but **did not guarantee GPU host persistence or capacity**: after the Pod was stopped, a later restart returned **HTTP 400: “There are not enough free GPUs on the host machine to start this pod.”** This made the fixed-Pod approach unreliable for a demonstration that should start on demand. Moving to Serverless Queue workers decoupled job scheduling from restarting that specific Pod host, provided asynchronous status tracking, and allowed idle GPU workers to scale to zero.
 
+**Operational trade-off:** Serverless is **not guaranteed GPU availability**. The first endpoint configuration could not immediately allocate a worker with the selected 24 GB hardware; selecting an available **NVIDIA A40 (48 GB)** configuration allowed the test worker to start. The worker then exposed a runtime **Unsloth/Triton “Failed to find C compiler”** error, resolved by adding `build-essential` in a separate compiler-enabled Dockerfile. The successful inference run produced a real SFT maintenance report; the Streamlit frontend subsequently performed a successful multi-checkpoint request.
 
 ### User interface
 
@@ -287,124 +294,73 @@ In **Try a new note**, visitors enter an unstructured technician observation, se
 
 The live schema check counts the presence of the seven expected heading labels in a generated report; **it is not an evidence-accuracy, hallucination, or industrial-compliance score**. Live metrics are separate from the project's saved 10-scenario AI-assisted evaluation and do not inherit its benchmark scores.
 
-### Deployment architecture
+### Current deployment architecture — RunPod Serverless
 
-This is a **normal RunPod GPU Pod**, not a Serverless worker. The Pod ID is fixed in Streamlit Secrets; the controller does not choose another GPU type or provision a replacement Pod automatically.
+**Endpoint type:** Queue-based RunPod Serverless **Flex**, configured with **0 active (always-on) workers** and **1 maximum worker** for controlled testing. The successfully tested worker used an **NVIDIA A40 48 GB GPU**. The GPU memory size is an allocation choice, **not** a minimum model requirement or a promise of future capacity. Flex workers are provisioned on demand and can scale back to zero when idle.
 
-```mermaid
-flowchart TD
-    Click["Visitor clicks Generate"] --> Health{"Authenticated FastAPI /health ready?"}
-    Health -->|Yes| Job["POST /jobs"]
-    Health -->|No| Status["RunPod REST v2: get existing Pod status"]
-    Status --> State{"Pod stopped?"}
-    State -->|Yes| Resume["POST /v2/pods/ID/action with action=start"]
-    State -->|No| Wait["Poll FastAPI /health"]
-    Resume --> GPU{"GPU capacity available?"}
-    GPU -->|No| Error["Explain temporary inference unavailability"]
-    GPU -->|Yes| Boot["Pod boots; FastAPI startup required"]
-    Boot --> Wait
-    Wait --> Ready{"API ready within timeout?"}
-    Ready -->|Yes| Job
-    Ready -->|No| Error
-    Job --> Work["Sequential Qwen checkpoint generation"]
-    Work --> Poll["GET /jobs/job_id until completed"]
-    Poll --> Report["Show reports and live metrics"]
-    Report --> Stop{"Started by this request, auto-stop enabled?"}
-    Stop -->|Yes| StopAPI["POST /v2/pods/ID/action with action=stop"]
-    Stop -->|No| Keep["Existing running Pod left running"]
-    StopAPI --> Verify["Verify stopped in RunPod to avoid ongoing charges"]
-    Storage["Persistent Network Volume /workspace: adapters + cache + venv"] -.-> Boot
-    Storage -.-> Work
-    Saved["Streamlit benchmark CSVs"] --> Offline["Saved comparisons work without GPU"]
-```
-
-**Security:** RunPod management and FastAPI Bearer credentials stay server-side. Opening the Streamlit app does not start the Pod; clicking **Generate** does.
-
-
-
-### Request lifecycle
-
-1. The user enters a fictional note, selects checkpoints and clicks **Generate**.
-2. Streamlit checks authenticated `GET /health` on the configured Pod's port-8000 RunPod proxy.
-3. When auto-start is enabled and the Pod is stopped, `streamlit_app/pod_autostart.py` invokes **RunPod REST v2** `POST /v2/pods/{pod_id}/action` with `{"action":"start"}`. The previous `/pods/{pod_id}/start` route returned HTTP 404 and was corrected on 9 November 2026.
-4. The Pod must start FastAPI automatically; Streamlit waits up to 8 minutes for the health check. GPU capacity shortages and startup failures can still interrupt generation.
-5. Streamlit submits authenticated `POST /jobs` with note, selected stages and token limit. FastAPI enqueues one in-memory job and returns a job ID.
-6. Qwen2.5-1.5B runs each selected checkpoint **sequentially** (Base, CPT, SFT, DPO), without stacking separate LoRA adapters. Streamlit polls `GET /jobs/{job_id}`.
-7. The app displays outputs and live performance/heading metrics, and offers JSON/CSV exports. Saved benchmark scores are separate.
-8. When this request originally started the Pod, the controller **attempts** `{"action":"stop"}` on completion or failure.
-
-**Tested:** A stopped-Pod-to-live-inference cycle succeeded on 9 November 2026. **Not guaranteed:** GPU availability, successful restart, stop delivery, or hard billing protection. A previously running Pod is intentionally not stopped by this controller; Streamlit crashes may skip the stop request. Soft per-process request counters can reset when Streamlit restarts.
-
-
-
-### Storage and reproducibility
-
-A 30 GB **RunPod Network Volume** retains the inference assets independent of Pod lifecycle:
+**Storage:** The existing 30 GB RunPod Network Volume retains the Qwen base-model cache and the three LoRA adapter directories. The volume is exposed to the Serverless container at `/runpod-volume`, rather than the old Pod's `/workspace` path:
 
 ```text
-/workspace/
-  llm-post-training-service/
-    backend/                  # deployed backend + boot_pod.sh + start_api.sh + requirements-api.txt
-    runtime/venv/             # persistent CUDA/PyTorch/PEFT/Unsloth/FastAPI Python environment
-    logs/                     # FastAPI startup logs
-  llm-post-training/models/   # three saved LoRA adapter directories
-  hf-cache/                   # Qwen model/tokenizer cache
-  persistence_test.txt        # optional persistence sentinel
+/runpod-volume/
+  llm-post-training/models/
+    stage1_non_instruction_adapter/
+    stage2_domain_sft_adapter/
+    stage3_dpo_adapter/
+  hf-cache/
 ```
 
-The Python virtual environment in `runtime/venv` successfully installed and reported **CUDA: True** on 9 November 2026. It remains reusable across container resets with a compatible Python/CUDA image, unlike container-local Python packages. Network Volume storage stays billable while stopped and is tied to its data center.
+The model cache and adapters survive worker termination, while software dependencies are installed in the **Docker image**. The Network Volume is **tied to a specific data center**, which restricts Serverless worker placement and can still cause queue delays. Volume storage charges can continue when no GPU worker is active.
 
-```bash
-findmnt -T /workspace -o TARGET,SOURCE,FSTYPE
-df -h /workspace
-find /workspace/llm-post-training/models -name adapter_config.json
-ls /workspace/llm-post-training-service/runtime/venv/bin/python
-```
+### Serverless request lifecycle
 
-The adapters are also backed up as private Hugging Face **model** repositories. Do not commit trained weights, credentials or sensitive equipment records.
+1. A user enters a **fictional or non-confidential** technician note and selects Base Qwen, CPT, SFT and/or DPO in `streamlit_app/serverless_app.py`.
+2. `streamlit_app/serverless_client.py` authenticates with a RunPod API key stored in Streamlit Secrets and submits `POST https://api.runpod.ai/v2/{endpoint_id}/run`.
+3. RunPod queues the job and allocates a compatible GPU worker, subject to regional capacity and the attached Network Volume.
+4. The [Serverless handler](gpu_backend/serverless/handler.py) validates input, checks that adapters are mounted, and calls the existing [inference engine](gpu_backend/inference_engine.py).
+5. The engine loads/runs each requested checkpoint **sequentially**, returning generated reports and per-checkpoint metrics.
+6. Streamlit polls `GET https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}` until completion or failure, displays the reports, and provides the live charts and downloads.
+7. With zero configured active workers, RunPod can scale workers down after inactivity. A completed job **does not** guarantee that the worker immediately stops billing; check the Workers and billing screens.
 
+**Validated on 9 November 2026:** successful container build, actual A40 GPU allocation, C-compiler dependency fix, a completed SFT inference request, and an end-to-end live Streamlit request with multiple trained checkpoints. This is an **engineering demonstration**, not a service-level availability guarantee or production validation.
 
+### Serverless implementation and reproduction
 
-### Backend start and public endpoint
-
-| File | Role |
+| File | Responsibility |
 |---|---|
-| `streamlit_app/app.py` | Maintenance UI, saved benchmark, live model comparison |
-| `streamlit_app/pod_autostart.py` | On-demand normal-Pod start, readiness checks, best-effort stop |
-| `gpu_backend/backend.py` | Authenticated FastAPI health, jobs and status |
-| `gpu_backend/inference_engine.py` | Loads Base Qwen / CPT / SFT / DPO for actual inference |
-| `gpu_backend/requirements-api.txt` | Full GPU inference Python dependencies |
-| `gpu_backend/boot_pod.sh` | Persistent Python environment and backend startup wrapper |
-| `gpu_backend/start_api.sh` | Version-controlled FastAPI start command; keep the deployed copy synchronized |
-| `gpu_backend/start_runpod.sh` | Manual backend-start alternative for the GitHub backend layout |
+| [`streamlit_app/serverless_app.py`](streamlit_app/serverless_app.py) | Standalone Streamlit frontend: saved benchmarks, real inference and live charts |
+| [`streamlit_app/serverless_client.py`](streamlit_app/serverless_client.py) | Asynchronous RunPod Queue request, status polling and timeout handling |
+| [`gpu_backend/serverless/handler.py`](gpu_backend/serverless/handler.py) | RunPod job handler, input validation, adapter checks and inference engine call |
+| [`gpu_backend/serverless/Dockerfile.compiler`](gpu_backend/serverless/Dockerfile.compiler) | **Successfully deployed fix**: runtime image with GCC/G++ for Unsloth/Triton JIT compilation |
+| [`gpu_backend/serverless/Dockerfile`](gpu_backend/serverless/Dockerfile) | Initial image definition; lacked the system C compiler and failed at inference |
+| [`gpu_backend/serverless/requirements.txt`](gpu_backend/serverless/requirements.txt) | RunPod SDK and model-inference dependencies |
+| [`gpu_backend/inference_engine.py`](gpu_backend/inference_engine.py) | Shared Qwen base/CPT/SFT/DPO model execution, unchanged |
+| [`gpu_backend/serverless/DEPLOYMENT.md`](gpu_backend/serverless/DEPLOYMENT.md) | Step-by-step deployment guidance and known constraints |
 
-Expose RunPod **HTTP port 8000**, set `INFERENCE_API_KEY` on the Pod, and ensure the actual container startup hook launches FastAPI on Pod boot. A mere RunPod Start command passed as arguments to `/start.sh` may not execute; FileBrowser images have different entrypoint/post-start behavior. Test an authenticated `GET /health` returning HTTP 200. If automated startup fails, inspect the persistent `llm-post-training-service/logs` folder, and use the current deployed `start_api.sh` as a manual recovery path.
+**Reproduce the Serverless deployment:** Connect the GitHub repository to RunPod, create a **Queue** Serverless endpoint, use the repository root as the build context and `gpu_backend/serverless/Dockerfile.compiler` as the Dockerfile path, attach the original Network Volume, set active workers to **0** and max workers to **1**, and deploy. Verify the build before sending **one** real inference request. See the detailed [Serverless deployment guide](gpu_backend/serverless/DEPLOYMENT.md); if that guide refers to `Dockerfile`, use the **compiler-enabled** variant for the tested configuration.
 
-**Streamlit Community Cloud Secrets** (placeholders only):
+Deploy a **separate** Streamlit Community Cloud app with main file path `streamlit_app/serverless_app.py`, and store credentials only in the new app's Secrets:
 
 ```toml
-GPU_API_URL = "https://YOUR-POD-ID-8000.proxy.runpod.net"
-GPU_API_KEY = "YOUR-FASTAPI-INFERENCE-KEY"
-RUNPOD_AUTO_START = true
-RUNPOD_POD_ID = "YOUR-POD-ID"
-RUNPOD_API_KEY = "YOUR-RUNPOD-MANAGEMENT-KEY"
-RUNPOD_STOP_AFTER_REQUEST = true
+SERVERLESS_ENDPOINT_ID = "YOUR_RUNPOD_SERVERLESS_ENDPOINT_ID"
+SERVERLESS_API_KEY = "YOUR_RUNPOD_API_KEY"
+SERVERLESS_DEMO_PASSWORD = "YOUR_PRIVATE_DEMO_ACCESS_CODE"
 ```
 
-`GPU_API_KEY` must match Pod `INFERENCE_API_KEY`. `RUNPOD_API_KEY` is a separate RunPod management credential. A newly created replacement Pod requires updating both `RUNPOD_POD_ID` and `GPU_API_URL`. Neither secret belongs in GitHub.
+The optional demo access code protects the paid **Generate** action during testing. It is **not a durable rate limit or account-level spending cap**. Do not commit credentials or share them in screenshots.
 
+### Prior implementation — normal RunPod Pod + FastAPI (retained)
 
+The original deployment used `streamlit_app/app.py`, `streamlit_app/pod_autostart.py`, and `gpu_backend/backend.py` to start a **fixed Pod**, poll FastAPI `/health`, submit `POST /jobs`, poll `GET /jobs/{job_id}`, and attempt to stop the Pod afterward. A stopped-Pod-to-inference test did succeed on **9 November 2026**, but subsequent Pod restart failed because the original host could not provide the GPU again. This was the practical **GPU persistence/availability** limitation that motivated Serverless. The legacy source files were preserved rather than overwritten.
+
+Normal-Pod secrets (`GPU_API_URL`, `GPU_API_KEY`, `RUNPOD_POD_ID`, `RUNPOD_API_KEY`, etc.) are **not used** by the separate Serverless Streamlit entrypoint.
 
 ### Availability, cost and security
 
-- Static Streamlit benchmark pages are available while the GPU is stopped.
-- On **Generate**, the controller resumes the **configured normal Pod** rather than dynamically choosing new GPUs or using Serverless. When the Pod was stopped its previous GPU reservation was released; future capacity is not assured.
-- RunPod GPU compute billing continues whenever the Pod is running, even without inference. Network Volume storage remains billed while stopped. An auto-stop request is **best-effort**, not a hard expenditure cap.
-- One-at-a-time locking and per-process limits are not durable quota controls. Add independent runtime limits, account budget alerts and durable rate limiting before unrestricted public usage.
-- No hosted Hugging Face explanation requests are made by the checkpoint comparison. Real inference runs saved Qwen weights; synthetic benchmark reports are separate.
-- Keep management keys, FastAPI keys and HF tokens in managed secrets; rotate any that are exposed.
-
-
+- **Scale-to-zero is not a GPU guarantee:** Capacity shortages, cold-start image downloads, regional Network Volume restrictions and worker errors can delay or prevent requests.
+- **Workers may incur charges during startup, execution and idle transitions.** The volume may continue accruing storage costs even with zero running workers. The observed A40 console rate during testing was **$0.00034/s** (approximately **$1.22/hr** at that rate); current pricing should be verified in RunPod before reuse.
+- **Max workers = 1 limits concurrency, not cumulative spending.** The $20 testing budget is a personal target, not a hard billing control. Avoid unrestricted public inference without durable quotas, authentication and monitoring.
+- **Security:** RunPod API keys live server-side in Streamlit Secrets; trained checkpoints and persistent storage are not exposed to visitors. An access code can restrict demo use, but further security and abuse controls are required for production.
+- **Evaluation integrity:** New live reports produce latency/token/heading-presence metrics but **do not inherit the saved benchmark's evidence-retention or unsupported-claim scores**. Technical recommendations remain unverified drafting suggestions.
 
 ## Limitations & Responsible Use
 
