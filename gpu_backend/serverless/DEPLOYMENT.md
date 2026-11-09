@@ -8,13 +8,14 @@
 - **GPU capacity is NOT guaranteed.** A worker can queue, start slowly, fail to load, or time out. Using your current **single network volume pins workers to its data center** and limits failover. Additional volumes in other data centers would need copies of the same model files to improve regional flexibility.
 - A successful build is **not proof of working inference**. Only the real `/run` test and live Streamlit report confirm that.
 - Auto-scaling to zero prevents continuous *worker* billing but does not prevent bills for startup time, execution time, configured idle timeout, container disk, or the Network Volume.
-- **$20 is a desired budget, not an enforced RunPod hard limit.** Maximum workers = 1 limits simultaneous GPU instances, not total queued jobs or total spending. Keep the demo access code and check usage manually until you have a real durable quota.
+- **$20 is a desired budget, not an enforced RunPod hard limit.** Maximum workers = 1 limits simultaneous GPU instances, not total queued jobs or total spending. Because the current UI has no visitor password, restrict app access and check usage manually until you have a real durable quota.
 
 ## New files
 
 | File | Use |
 |---|---|
-| `gpu_backend/serverless/Dockerfile` | Build GPU worker image from the GitHub repository |
+| `gpu_backend/serverless/Dockerfile.compiler` | Tested GPU image with GCC/G++ needed for Unsloth/Triton kernels |
+| `gpu_backend/serverless/Dockerfile` | Original image; lacks the required C compiler |
 | `gpu_backend/serverless/requirements.txt` | RunPod SDK and GPU inference dependencies |
 | `gpu_backend/serverless/handler.py` | Serverless job handler using unmodified `gpu_backend/inference_engine.py` |
 | `streamlit_app/serverless_client.py` | Submit async jobs and poll RunPod Serverless status |
@@ -34,7 +35,7 @@ Open RunPod → Storage → Network Volumes and verify the **actual data center*
 2. Authorize access to **only** `imavantikahere/llm-post-training-and-alignment` when possible.
 3. Go to https://console.runpod.io/serverless → **New Endpoint** → **Import Git Repository**.
 4. Choose repository `imavantikahere/llm-post-training-and-alignment`, branch `main`.
-5. Under **Dockerfile Path**, enter exactly `gpu_backend/serverless/Dockerfile`.
+5. Under **Dockerfile Path**, enter exactly `gpu_backend/serverless/Dockerfile.compiler` (the tested, compiler-enabled image).
 6. Confirm build context resolves to repository root: Dockerfile uses `COPY gpu_backend/...` and should find the files. If the builder reports missing `COPY` paths, inspect build context settings; do not modify your working app to compensate.
 7. Select endpoint type **Queue**, not Load Balancer.
 
@@ -120,15 +121,14 @@ Official API doc: https://docs.runpod.io/serverless/endpoints/send-requests
 ```toml
 SERVERLESS_ENDPOINT_ID = "YOUR_NEW_SERVERLESS_ENDPOINT_ID"
 SERVERLESS_API_KEY = "YOUR_RUNPOD_API_KEY"
-SERVERLESS_DEMO_PASSWORD = "LONG_RANDOM_TEST_PASSWORD"
 ```
 
-This app does not use the old `GPU_API_URL`, `RUNPOD_AUTO_START`, or `RUNPOD_POD_ID` settings. The optional password protects the **Generate** button during testing. Do not confuse `SERVERLESS_API_KEY` (RunPod API authorization) with the old `GPU_API_KEY` (FastAPI Bearer key).
+This app does not use the old `GPU_API_URL`, `RUNPOD_AUTO_START`, or `RUNPOD_POD_ID` settings. There is no demo password field in the current Serverless UI. Do not confuse `SERVERLESS_API_KEY` (RunPod API authorization) with the old `GPU_API_KEY` (FastAPI Bearer key).
 
-7. Open the new Streamlit app, navigate to **Try a new note**, enter the temporary access code, select **SFT only**, and press Generate.
+7. Open the new Streamlit app, navigate to **Try a new note**, select **SFT only**, and press Generate.
 8. Confirm a real report and latency/token metrics. If successful, try all four checkpoints once, with budget awareness.
 
-Only after confirming end-to-end Serverless inference should you consider sharing the new app publicly. If you remove `SERVERLESS_DEMO_PASSWORD`, anybody with the URL can request paid GPU work; max workers = 1 is NOT a spending cap.
+**Public access warning:** The inference tab has no visitor password field. Anybody able to access the Streamlit app can submit billable GPU work. Max workers = 1 is NOT a spending cap. Restrict access or add durable authentication and rate limits before widely sharing the app.
 
 ## Step 7 — Confirm charges and stop testing
 
@@ -148,7 +148,7 @@ As of November 2026, RunPod lists roughly **$0.75/hour** for 24 GB Serverless Fl
 | Qwen loads fail | GPU/CUDA/Python/library compatibility or model cache issue; inspect worker logs |
 | Job `IN_QUEUE` for a long time | No workers/GPU capacity, constrained volume region, or max-workers limit |
 | Job `FAILED` | Inspect worker logs and input-validation error |
-| Streamlit missing secrets | Configure the **new** Streamlit app's Secrets, not the old app's |
+| Streamlit missing secrets | Configure the **new** Streamlit app's endpoint ID and API key Secrets, not the old app's |
 | Worker keeps running | Set Active Workers=0 and short Idle Timeout; inspect workers and billing |
 
 **Reference pricing:** https://www.runpod.io/pricing and https://docs.runpod.io/serverless/pricing
